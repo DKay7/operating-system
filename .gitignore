@@ -8,6 +8,8 @@
 *.rej
 *.patch
 *.diff
+.cache/*
+compile_commands.json
 /lib/random_data.c
 .DS_Store
 .gdb_history

@@ -93,37 +93,70 @@ ASM_PFX(CallKernelThroughGateAsm):
 
     ; 1. Disable paging.
     ; LAB 2: Your code here:
+    mov eax, cr0
+    and eax, 0x7FFFFFFF
+    mov cr0, eax ; CR0.PG = 0
 
     ; 2. Switch to our GDT that supports 64-bit mode and update CS to LINEAR_CODE_SEL.
     ; LAB 2: Your code here:
+    lgdt [GDT_DESCRIPTOR] 
+    jmp LINEAR_CODE_SEL:AsmWithOurGdt ; CS = LINEAR_CODE_SEL
 
 AsmWithOurGdt:
 
     ; 3. Reset all the data segment registers to linear mode (LINEAR_DATA_SEL).
     ; LAB 2: Your code here:
+    mov AX, LINEAR_DATA_SEL
+    mov DS, AX
+    mov ES, AX
+    mov SS, AX
+    mov FS, AX
+    mov GS, AX
 
     ; 4. Enable PAE/PGE in CR4, which is required to transition to long mode.
     ; This may already be enabled by the firmware but is not guaranteed.
     ; LAB 2: Your code here:
+    mov eax, cr4
+    or eax, 1 << 5
+    mov cr4, eax ; CR4.PAE = 1;
 
     ; 5. Update page table address register (CR3) right away with the supplied PAGE_TABLE.
     ; This does nothing as paging is off at the moment as paging is disabled.
     ; LAB 2: Your code here:
+    mov eax, [PAGE_TABLE]
+    mov cr3, eax
 
     ; 6. Enable long mode (LME) and execute protection (NXE) via the EFER MSR register.
     ; LAB 2: Your code here:
+    mov ecx, 0xC0000080      ; IA32_EFER MSR
+    rdmsr
+    or  eax, 1 << 8          ; EFER.LME = 1
+    wrmsr
 
     ; 7. Enable paging as it is required in 64-bit mode.
     ; LAB 2: Your code here:
-
+    mov eax, cr0
+    or eax, 1 << 31 ; CR0.PG = 1 - virtual paging
+    or eax, 1 << 18 ; CR0.AM = 1 - aligment
+    or eax, 1 << 16 ; CR0.WP = 1 - write protection inot read-only pages
+    mov cr0, eax 
+    
     ; 8. Transition to 64-bit mode by updating CS with LINEAR_CODE64_SEL.
     ; LAB 2: Your code here:
+    jmp LINEAR_CODE64_SEL:AsmInLongMode ; CS = LINEAR_CODE64_SEL
 
 AsmInLongMode:
     BITS 64
 
     ; 9. Reset all the data segment registers to linear 64-bit mode (LINEAR_DATA64_SEL).
     ; LAB 2: Your code here:
+
+    mov rax, LINEAR_DATA64_SEL
+    mov DS, rax
+    mov ES, rax
+    mov SS, rax
+    mov FS, rax
+    mov GS, rax
 
     ; 10. Jump to the kernel code.
     mov ecx, [REL LOADER_PARAMS]

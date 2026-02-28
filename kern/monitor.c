@@ -1,6 +1,7 @@
 /* Simple command-line kernel monitor useful for
  * controlling the kernel and exploring the system interactively. */
 
+#include "inc/trap.h"
 #include <inc/stdio.h>
 #include <inc/string.h>
 #include <inc/memlayout.h>
@@ -11,6 +12,7 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <stdint.h>
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS    16
@@ -19,6 +21,7 @@
 int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
+int mon_sayhello(int argc, char **argv, struct Trapframe *tf);
 
 struct Command {
     const char *name;
@@ -31,6 +34,7 @@ static struct Command commands[] = {
         {"help", "Display this list of commands", mon_help},
         {"kerninfo", "Display information about the kernel", mon_kerninfo},
         {"backtrace", "Print stack backtrace", mon_backtrace},
+        {"say-hello", "Prints hello message", mon_sayhello},
 };
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
 
@@ -59,8 +63,63 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
 
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
-    // LAB 2: Your code here
+    uint64_t rbp = read_rbp();
+    uint64_t rip = read_rip();
 
+// entry.S says:
+// entry:
+//  # Set up kernel stack
+//  leaq bootstacktop(%rip),%rsp
+//  xor rbp, rbp
+//
+//  so, we could check if rbp != 0
+//  BUT we also can extern'd bootstacktop and entry (for rip) symbols
+//  get bootstacktop + entry to get actual address of bootstacktop
+//  and obtain stack top pointer :)
+
+// extern char entry[];
+// extern uint64_t bootstacktop;
+// uint64_t top = (uint64_t)(bootstacktop + entry);
+#define print_trace_entry()                                             \
+    do {                                                                \
+        struct Ripdebuginfo debug_info;                                 \
+        debuginfo_rip(rip, &debug_info);                                \
+                                                                        \
+        cprintf("rbp %016lx rip %016lx\n\t%s:%d: %s+%lu\n\n", rbp, rip, \
+                debug_info.rip_file, debug_info.rip_line,               \
+                debug_info.rip_fn_name, rip - debug_info.rip_fn_addr);  \
+    } while (0)
+
+    while (rbp != 0) { // boring sane solution
+
+        print_trace_entry();
+
+        // since we do:
+        //
+        // push rpb
+        // mov rbp, rsp
+        //
+        // previous rpb will always be pointed-by current one
+        // and rip will be in stack just before rbp
+        // and since stack grows down, we should sum up
+        //
+        uint64_t new_rbp_ptr = rbp;
+        uint64_t new_rip_ptr = rbp + 8;
+
+        rbp = *(uint64_t *)new_rbp_ptr;
+        rip = *(uint64_t *)new_rip_ptr;
+    }
+
+    // last print since in `entry` rbp = 0
+    // but we should print rip
+    print_trace_entry();
+
+    return 0;
+}
+
+int
+mon_sayhello(int argc, char **argv, struct Trapframe *tf) {
+    cprintf("Hello from kernel\n");
     return 0;
 }
 
