@@ -13,6 +13,7 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <stdint.h>
+#include <kern/env.h>
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS    16
