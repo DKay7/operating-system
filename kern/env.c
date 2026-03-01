@@ -1,5 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
+#include "inc/env.h"
+#include "inc/stdio.h"
 #include <inc/x86.h>
 #include <inc/mmu.h>
 #include <inc/error.h>
@@ -89,6 +91,21 @@ env_init(void) {
     /* Set up envs array */
 
     // LAB 3: Your code here
+    for (int idx = 0; idx < NENV; ++idx) {
+
+        struct Env tmp = {
+                .env_id = 0,
+                .env_link = envs + idx + 1,
+                .env_type = ENV_FREE,
+                .env_runs = 0,
+        };
+
+        envs[idx] = tmp;
+    }
+
+    envs[NENV - 1].env_link = NULL;
+
+    env_free_list = &envs[0];
 }
 
 /* Allocates and initializes a new environment.
@@ -145,7 +162,10 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_KT;
 
     // LAB 3: Your code here:
-    // static uintptr_t stack_top = 0x2000000;
+    static uintptr_t stack_top = 0x2000000;
+    env->env_tf.tf_rsp = stack_top;
+    stack_top -= 2 * PAGE_SIZE;
+
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -220,6 +240,35 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
+    struct Elf header = *(struct Elf *)binary;
+
+    if (header.e_magic != ELF_MAGIC)
+        return -1;
+
+    struct Proghdr *prog_heades = (struct Proghdr *)(binary + header.e_phoff);
+
+    // reading prog_headers array
+    for (int p_idx = 0; p_idx < header.e_phnum; ++p_idx) {
+        struct Proghdr cur_ph = prog_heades[p_idx];
+
+        if (cur_ph.p_filesz > cur_ph.p_memsz)
+            return -1;
+
+        if (cur_ph.p_type != ELF_PROG_LOAD)
+            continue;
+
+        // zeroing memory
+        memset((uint8_t *)cur_ph.p_va, 0, cur_ph.p_memsz);
+
+        // copying code
+        memcpy((uint8_t *)cur_ph.p_va, binary + cur_ph.p_offset, cur_ph.p_filesz);
+    }
+
+    // set entry point into trapframe
+    env->env_tf.tf_rip = (uintptr_t)header.e_entry;
+
+    env->binary = binary;
+
     return 0;
 }
 
@@ -232,6 +281,12 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
+
+    struct Env *new_env = NULL;
+    env_alloc(&new_env, 0, type);
+    load_icode(new_env, binary, size);
+
+    new_env->env_type = ENV_TYPE_KERNEL;
 }
 
 
@@ -350,6 +405,19 @@ env_run(struct Env *env) {
 
     // LAB 3: Your code here
 
-    while (1)
-        ;
+    if (curenv) {
+        if (curenv->env_status != ENV_RUNNING) // no ide why but let it be
+            cprintf("curenv->env_status != ENV_RUNNING, = %d ", curenv->env_status);
+
+        curenv->env_status = ENV_RUNNABLE;
+    }
+
+    curenv = env;
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs++; // env_runs is initialized to 0 in env_init(), so it's save to increment it
+    
+    if (trace_envs_more)
+        cprintf("ENV: new rip = %016lx\n", curenv->env_tf.tf_rip);
+
+    env_pop_tf(&curenv->env_tf);
 }
