@@ -1,3 +1,6 @@
+#include "inc/env.h"
+#include "inc/stdio.h"
+#include "kern/traceopt.h"
 #include <inc/assert.h>
 #include <inc/x86.h>
 #include <kern/env.h>
@@ -25,7 +28,18 @@ sched_yield(void) {
      * below to halt the cpu */
 
     // LAB 3: Your code here:
-    env_run(&envs[0]);
+    for (int idx = 0; idx < NENV; ++idx) {
+        if (envs[idx].env_status == ENV_RUNNABLE) {
+            env_run(&envs[idx]);
+        }
+    }
+
+    for (int idx = 0; idx < NENV; ++idx) {
+        if (envs[idx].env_status == ENV_RUNNING) {
+            env_run(&envs[idx]);
+        }
+    }
+
 
     cprintf("Halt\n");
 
@@ -63,6 +77,5 @@ sched_halt(void) {
             "hlt\n" ::"a"(cpu_ts.ts_rsp0));
 
     /* Unreachable */
-    for (;;)
-        ;
+    for (;;);
 }

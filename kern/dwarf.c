@@ -74,9 +74,8 @@ dwarf_read_abbrev_entry(const void *entry, unsigned form, void *buf, int bufsize
         uint32_t length = get_unaligned(entry, Dwarf_Half);
         entry += sizeof(Dwarf_Half);
         struct Slice slice = {
-            .mem = entry,
-            .len = length
-        };
+                .mem = entry,
+                .len = length};
 
         if (buf) memcpy(buf, &slice, sizeof(struct Slice));
         entry += length;
@@ -550,7 +549,7 @@ address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *
                 while (abbrev_entry < addrs->abbrev_end) {
                     abbrev_entry += dwarf_read_uleb128(abbrev_entry, &table_abbrev_code);
                     abbrev_entry += dwarf_read_uleb128(abbrev_entry, &tag);
-                    abbrev_entry += sizeof(Dwarf_Small);
+                    abbrev_entry += sizeof(Dwarf_Small); // [Dkay]: has_children = 1 byte
                     if (table_abbrev_code == abbrev_code) break;
 
                     /* skip attributes */
@@ -571,9 +570,30 @@ address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *
                      * You can read unsigned LEB128 number using dwarf_read_uleb128 function.
                      * Attribute value can be obtained using dwarf_read_abbrev_entry function. */
                     // LAB 3: Your code here:
+
+                    // eco-friendly reusing recycled stuff
+                    name = 0;
+                    form = 0;
+
                     uintptr_t low_pc = 0;
 
-                    if (low_pc) {
+                    // iterate over attributes in abbrev table:
+                    do {
+                        abbrev_entry += dwarf_read_uleb128(abbrev_entry, &name);
+                        abbrev_entry += dwarf_read_uleb128(abbrev_entry, &form);
+
+                        if (name == DW_AT_low_pc) {
+                            entry += dwarf_read_abbrev_entry(entry, form, &low_pc, sizeof(low_pc), address_size);
+                            // break; // can not break in case low_pc == 0 and we have to read entry further
+                        } else {
+                            // skip useless entries
+                            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                        }
+
+                    } while (name != 0 || form != 0);
+
+
+                    if (low_pc != 0) {
                         *offset = low_pc;
                         return 0;
                     }

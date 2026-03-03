@@ -1,3 +1,5 @@
+#include "inc/error.h"
+#include "inc/stdio.h"
 #include <inc/string.h>
 #include <inc/memlayout.h>
 #include <inc/assert.h>
@@ -8,6 +10,7 @@
 #include <kern/kdebug.h>
 #include <kern/env.h>
 #include <inc/uefi.h>
+#include <stdint.h>
 
 void
 load_kernel_dwarf_info(struct Dwarf_Addrs *addrs) {
@@ -84,7 +87,6 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     info->rip_fn_namelen = strlen(info->rip_fn_name);
     // LAB 2: Your res here:
 
-                //debug_info.rip_fn_name, rip - debug_info.rip_fn_addr);
 error:
     return res;
 }
@@ -99,5 +101,44 @@ find_function(const char *const fname) {
 
     // LAB 3: Your code here:
 
-    return 0;
+    struct Dwarf_Addrs addrs;
+    load_kernel_dwarf_info(&addrs);
+
+    uintptr_t rip = 0;
+    int retval = address_by_fname(&addrs, fname, &rip);
+
+    if (retval != 0) {
+        retval = naive_address_by_fname(&addrs, fname, &rip);
+    }
+
+    if (retval != 0) {
+        retval = find_addr_in_symtab((struct Elf64_Sym *)uefi_lp->SymbolTableStart,
+                                     (struct Elf64_Sym *)uefi_lp->SymbolTableEnd,
+                                     (uint8_t *)uefi_lp->StringTableStart, fname, &rip);
+    }
+
+    if (retval != 0)
+        cprintf("error find_function(`%s`): %i\n", fname, retval);
+
+    return rip;
+}
+
+
+int
+find_addr_in_symtab(struct Elf64_Sym *symtab_start, struct Elf64_Sym *symtab_end,
+                    uint8_t *strtab, const char *const fname, uintptr_t *offset) {
+    assert(offset);
+
+    symtab_start++; // first entry of symtab is zero, so skip it
+
+    for (struct Elf64_Sym *symtab = symtab_start; symtab != symtab_end; symtab++) {
+
+        if (strcmp(fname, (char *)&strtab[symtab->st_name]) == 0) {
+            *offset = (uintptr_t)symtab->st_value;
+            return 0;
+        }
+    }
+
+
+    return -E_NO_ENT;
 }

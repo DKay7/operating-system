@@ -2,6 +2,7 @@
 
 #include "inc/env.h"
 #include "inc/stdio.h"
+#include "inc/types.h"
 #include <inc/x86.h>
 #include <inc/mmu.h>
 #include <inc/error.h>
@@ -15,6 +16,7 @@
 #include <kern/kdebug.h>
 #include <kern/macro.h>
 #include <kern/traceopt.h>
+#include <stdint.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -162,6 +164,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_KT;
 
     // LAB 3: Your code here:
+    // [Dkay]: Should think about restoring stack stack_top
+    // after proces ends
     static uintptr_t stack_top = 0x2000000;
     env->env_tf.tf_rsp = stack_top;
     stack_top -= 2 * PAGE_SIZE;
@@ -192,6 +196,50 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
     // LAB 3: Your code here:
 
     /* NOTE: find_function from kdebug.c should be used */
+
+    struct Elf header = *(struct Elf *)binary;
+
+    assert(header.e_shoff > 0);
+    assert(header.e_shoff + header.e_shnum * sizeof(struct Secthdr) <= size);
+
+    struct Secthdr *section_headers = (struct Secthdr *)(binary + header.e_shoff);
+    struct Secthdr *symtab_hdr = NULL;
+    struct Secthdr *strtab_hdr = NULL;
+
+
+    for (int idx = 0; idx < header.e_shnum; ++idx) {
+        if (section_headers[idx].sh_type != ELF_SHT_SYMTAB)
+            continue;
+
+        symtab_hdr = &section_headers[idx];
+        break;
+    }
+
+    strtab_hdr = &section_headers[symtab_hdr->sh_link];
+
+    assert(symtab_hdr != NULL);
+    assert(strtab_hdr != NULL);
+
+    struct Elf64_Sym *symtab_start = (struct Elf64_Sym *)(binary + symtab_hdr->sh_offset);
+    struct Elf64_Sym *symtab_end = (struct Elf64_Sym *)((uint8_t *)symtab_start + symtab_hdr->sh_size);
+    uint8_t *strtab = binary + strtab_hdr->sh_offset;
+
+    const char *core_functions[] = {"sys_exit", "sys_yield", "cprintf"}; // FIXME how to define set of core functions
+
+    const int64_t core_functions_size = sizeof(core_functions) / sizeof(core_functions[0]);
+
+    for (int idx = 0; idx < core_functions_size; ++idx) {
+        uintptr_t sym_addr = 0;
+        int ret = find_addr_in_symtab(symtab_start, symtab_end, strtab, core_functions[idx], &sym_addr);
+
+        if (ret != 0)
+            continue;
+
+        // found kernel function in binary's symtab:
+        uintptr_t new_rip = find_function(core_functions[idx]);
+        *(uintptr_t *)sym_addr = new_rip;
+    }
+
 
     return 0;
 }
@@ -240,6 +288,9 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
+    uint64_t start_addr = INT64_MAX;
+    uint64_t end_addr = 0;
+
     struct Elf header = *(struct Elf *)binary;
 
     if (header.e_magic != ELF_MAGIC)
@@ -262,12 +313,19 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 
         // copying code
         memcpy((uint8_t *)cur_ph.p_va, binary + cur_ph.p_offset, cur_ph.p_filesz);
+
+        start_addr = cur_ph.p_va < start_addr ? cur_ph.p_va : start_addr;
+
+        uint64_t potential_end_addr = cur_ph.p_va + cur_ph.p_memsz;
+        end_addr = potential_end_addr > end_addr ? potential_end_addr : end_addr;
     }
 
     // set entry point into trapframe
     env->env_tf.tf_rip = (uintptr_t)header.e_entry;
 
     env->binary = binary;
+
+    bind_functions(env, binary, size, start_addr, end_addr);
 
     return 0;
 }
@@ -315,6 +373,13 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+
+    if (env == curenv) {
+        env_free(env);
+        sys_yield();
+    } else {
+        env_free(env);
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -406,18 +471,15 @@ env_run(struct Env *env) {
     // LAB 3: Your code here
 
     if (curenv) {
-        if (curenv->env_status != ENV_RUNNING) // no ide why but let it be
-            cprintf("curenv->env_status != ENV_RUNNING, = %d ", curenv->env_status);
 
-        curenv->env_status = ENV_RUNNABLE;
+        if (curenv->env_status == ENV_RUNNING) {
+            curenv->env_status = ENV_RUNNABLE;
+        }
     }
 
     curenv = env;
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++; // env_runs is initialized to 0 in env_init(), so it's save to increment it
-    
-    if (trace_envs_more)
-        cprintf("ENV: new rip = %016lx\n", curenv->env_tf.tf_rip);
 
     env_pop_tf(&curenv->env_tf);
 }

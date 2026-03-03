@@ -25,4 +25,7 @@ struct Ripdebuginfo {
 int debuginfo_rip(uintptr_t eip, struct Ripdebuginfo *info);
 uintptr_t find_function(const char *const fname);
 
+struct Elf64_Sym;
+int find_addr_in_symtab(struct Elf64_Sym *symtab_start, struct Elf64_Sym *symtab_end,
+                        uint8_t *strtab, const char *const fname, uintptr_t *offset);
 #endif
