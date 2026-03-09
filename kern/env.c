@@ -378,12 +378,11 @@ env_destroy(struct Env *env) {
 
     // LAB 3: Your code here
 
+    env->env_status = ENV_DYING;
     if (env == curenv) {
         env_free(env);
         sys_yield();
-    } else {
-        env_free(env);
-    }
+    } 
 }
 
 #ifdef CONFIG_KSPACE
