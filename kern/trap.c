@@ -12,6 +12,7 @@
 #include <kern/sched.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
+#include <kern/timer.h>
 #include <kern/traceopt.h>
 #include <stdint.h>
 
@@ -99,6 +100,7 @@ void
 trap_init(void) {
     // LAB 4: Your code here
     extern void (*clock_thdlr)(void);
+    // LAB 5: Your code here
 
     idt[IRQ_CLOCK + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&clock_thdlr), 0);
     
@@ -217,8 +219,11 @@ trap_dispatch(struct Trapframe *tf) {
         }
         return;
     case IRQ_OFFSET + IRQ_CLOCK:
+    case IRQ_OFFSET + IRQ_TIMER:
         // LAB 4: Your code here
-        rtc_timer_pic_handle();
+        // rtc_timer_pic_handle();
+        
+        // LAB 5: Your code here
         return;
     default:
         print_trapframe(tf);
