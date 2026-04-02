@@ -15,4 +15,5 @@ struct header {
 
 typedef struct header Header;
 
+void alloc_init();
 #endif

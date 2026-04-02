@@ -86,7 +86,73 @@ acpi_find_table(const char *sign) {
      * HINT: RSDP address is stored in uefi_lp->ACPIRoot
      * HINT: You may want to distunguish RSDT/XSDT
      */
-    // LAB 5: Your code here:
+    typedef struct {
+        ACPISDTHeader h;
+        uint64_t PointerToOtherSDT[];
+    } __attribute__((packed)) XSDT;
+    static RSDP *rsdp;
+    ACPISDTHeader *root;
+    size_t entry_size;
+    size_t entries;
+
+    bool checksum_ok(const void *table, size_t len) {
+        const uint8_t *bytes = table;
+        uint8_t sum = 0;
+
+        for (size_t i = 0; i < len; i++)
+            sum += bytes[i];
+
+        return sum == 0;
+    }
+
+    ACPISDTHeader *map_sdt(physaddr_t pa) {
+        ACPISDTHeader *table = mmio_map_region(pa, sizeof(*table));
+        table = mmio_remap_last_region(pa, table, sizeof(*table), table->Length);
+
+        if (!checksum_ok(table, table->Length))
+            panic("ACPI table %.4s checksum mismatch", table->Signature);
+
+        return table;
+    }
+
+    if (rsdp == NULL) {
+        physaddr_t pa = uefi_lp->ACPIRoot;
+        size_t len;
+
+        rsdp = mmio_map_region(pa, sizeof(*rsdp));
+        len = rsdp->Revision >= 2 && rsdp->Length ? rsdp->Length : 20;
+        rsdp = mmio_remap_last_region(pa, rsdp, sizeof(*rsdp), len);
+
+        if (memcmp(rsdp->Signature, "RSD PTR ", sizeof(rsdp->Signature)) != 0)
+            panic("Invalid ACPI RSDP signature");
+        if (!checksum_ok(rsdp, 20))
+            panic("RSDP checksum mismatch");
+        if (rsdp->Revision >= 2 && !checksum_ok(rsdp, rsdp->Length))
+            panic("XSDP checksum mismatch");
+    }
+
+    if (rsdp->Revision >= 2 && rsdp->XsdtAddress) {
+        root = map_sdt(rsdp->XsdtAddress);
+        entry_size = sizeof(uint64_t);
+    } else {
+        root = map_sdt(rsdp->RsdtAddress);
+        entry_size = sizeof(uint32_t);
+    }
+
+    entries = (root->Length - sizeof(*root)) / entry_size;
+    for (size_t i = 0; i < entries; i++) {
+        physaddr_t pa;
+        ACPISDTHeader *table;
+
+        if (entry_size == sizeof(uint64_t))
+            pa = ((XSDT *)root)->PointerToOtherSDT[i];
+        else
+            pa = ((RSDT *)root)->PointerToOtherSDT[i];
+
+        table = map_sdt(pa);
+        if (memcmp(table->Signature, sign, 4) == 0)
+            return table;
+    }
 
     return NULL;
 }
@@ -94,21 +160,29 @@ acpi_find_table(const char *sign) {
 /* Obtain and map FADT ACPI table address. */
 FADT *
 get_fadt(void) {
-    // LAB 5: Your code here
-    // (use acpi_find_table)
-    // HINT: ACPI table signatures are
-    //       not always as their names
+    static FADT *fadt;
 
-    return NULL;
+    if (fadt == NULL) {
+        fadt = acpi_find_table("FACP");
+        if (fadt == NULL)
+            panic("FADT table not found");
+    }
+
+    return fadt;
 }
 
-/* Obtain and map RSDP ACPI table address. */
+/* Obtain and map HPET ACPI table address. */
 HPET *
 get_hpet(void) {
-    // LAB 5: Your code here
-    // (use acpi_find_table)
+    static HPET *hpet;
 
-    return NULL;
+    if (hpet == NULL) {
+        hpet = acpi_find_table("HPET");
+        if (hpet == NULL)
+            panic("HPET table not found");
+    }
+
+    return hpet;
 }
 
 /* Getting physical HPET timer address from its table. */
@@ -208,12 +282,42 @@ hpet_get_main_cnt(void) {
  * HINT Don't forget to unmask interrupt in PIC */
 void
 hpet_enable_interrupts_tim0(void) {
-    // LAB 5: Your code here
+    uint64_t conf;
+
+    hpet_init();
+    conf = hpetReg->TIM0_CONF;
+    if (!(conf & HPET_TN_PER_INT_CAP))
+        panic("HPET timer 0 does not support periodic mode");
+
+    hpetReg->GEN_CONF &= ~HPET_ENABLE_CNF;
+    hpetReg->GEN_CONF |= HPET_LEG_RT_CNF;
+    hpetReg->MAIN_CNT = 0;
+    conf |= HPET_TN_TYPE_CNF | HPET_TN_INT_ENB_CNF | HPET_TN_VAL_SET_CNF;
+    hpetReg->TIM0_CONF = conf;
+    hpetReg->TIM0_COMP = hpetFreq / 2;
+    hpetReg->TIM0_COMP = hpetFreq / 2;
+    pic_irq_unmask(IRQ_TIMER);
+    hpetReg->GEN_CONF |= HPET_ENABLE_CNF;
 }
 
 void
 hpet_enable_interrupts_tim1(void) {
-    // LAB 5: Your code here
+    uint64_t conf;
+
+    hpet_init();
+    conf = hpetReg->TIM1_CONF;
+    if (!(conf & HPET_TN_PER_INT_CAP))
+        panic("HPET timer 1 does not support periodic mode");
+
+    hpetReg->GEN_CONF &= ~HPET_ENABLE_CNF;
+    hpetReg->GEN_CONF |= HPET_LEG_RT_CNF;
+    hpetReg->MAIN_CNT = 0;
+    conf |= HPET_TN_TYPE_CNF | HPET_TN_INT_ENB_CNF | HPET_TN_VAL_SET_CNF;
+    hpetReg->TIM1_CONF = conf;
+    hpetReg->TIM1_COMP = (hpetFreq * 3) / 2;
+    hpetReg->TIM1_COMP = (hpetFreq * 3) / 2;
+    pic_irq_unmask(IRQ_CLOCK);
+    hpetReg->GEN_CONF |= HPET_ENABLE_CNF;
 }
 
 void
@@ -233,7 +337,24 @@ uint64_t
 hpet_cpu_frequency(void) {
     static uint64_t cpu_freq;
 
-    // LAB 5: Your code here
+    if (!cpu_freq) {
+        uint64_t start_hpet, end_hpet;
+        uint64_t start_tsc, end_tsc;
+        uint64_t delta_hpet;
+
+        hpet_init();
+
+        start_hpet = hpet_get_main_cnt();
+        start_tsc = read_tsc();
+        do {
+            asm volatile("pause");
+            end_hpet = hpet_get_main_cnt();
+        } while (end_hpet - start_hpet < hpetFreq / 10);
+        end_tsc = read_tsc();
+
+        delta_hpet = end_hpet - start_hpet;
+        cpu_freq = (end_tsc - start_tsc) * hpetFreq / delta_hpet;
+    }
 
     return cpu_freq;
 }
@@ -251,7 +372,24 @@ uint64_t
 pmtimer_cpu_frequency(void) {
     static uint64_t cpu_freq;
 
-    // LAB 5: Your code here
+    if (!cpu_freq) {
+        FADT *fadt = get_fadt();
+        uint64_t mask = (fadt->Flags & (1 << 8)) ? 0xFFFFFFFFULL : 0xFFFFFFULL;
+        uint64_t start_pm, end_pm;
+        uint64_t start_tsc, end_tsc;
+        uint64_t delta_pm;
+
+        start_pm = pmtimer_get_timeval() & mask;
+        start_tsc = read_tsc();
+        do {
+            asm volatile("pause");
+            end_pm = pmtimer_get_timeval() & mask;
+            delta_pm = (end_pm - start_pm) & mask;
+        } while (delta_pm < PM_FREQ / 10);
+        end_tsc = read_tsc();
+
+        cpu_freq = (end_tsc - start_tsc) * PM_FREQ / delta_pm;
+    }
 
     return cpu_freq;
 }

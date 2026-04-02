@@ -11,6 +11,13 @@ static uint8_t space[SPACE_SIZE];
 static Header base = {.next = (Header *)space, .prev = (Header *)space};
 /* start of free list */
 static Header *freep = NULL;
+static struct spinlock alloc_lock;
+
+
+void
+alloc_init() {
+    spin_initlock(&alloc_lock);
+}
 
 static void
 check_list(void) {
@@ -28,7 +35,9 @@ void *
 test_alloc(uint8_t nbytes) {
 
     /* Make allocator thread-safe with the help of spin_lock/spin_unlock. */
-    // LAB 5: Your code here:
+    spin_lock(&alloc_lock);
+    // TODO[Dkay]: it would be better to use RAII here such as `defer`
+    // but it's gcc-extension :(
 
     size_t nunits = (nbytes + sizeof(Header) - 1) / sizeof(Header) + 1;
 
@@ -58,11 +67,14 @@ test_alloc(uint8_t nbytes) {
                 p += p->size;
                 p->size = nunits;
             }
+
+            spin_unlock(&alloc_lock);
             return (void *)(p + 1);
         }
 
         /* wrapped around free list */
         if (p == freep) {
+            spin_unlock(&alloc_lock);
             return NULL;
         }
     }
@@ -76,7 +88,8 @@ test_free(void *ap) {
     Header *bp = (Header *)ap - 1;
 
     /* Make allocator thread-safe with the help of spin_lock/spin_unlock. */
-    // LAB 5: Your code here
+    // Dkay: Same lock since malloc may race with free too
+    spin_lock(&alloc_lock);
 
     /* freed block at start or end of arena */
     Header *p = freep;
@@ -104,4 +117,5 @@ test_free(void *ap) {
     freep = p;
 
     check_list();
+    spin_unlock(&alloc_lock);
 }

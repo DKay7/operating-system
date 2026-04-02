@@ -137,20 +137,41 @@ mon_sayhello(int argc, char **argv, struct Trapframe *tf) {
 }
 
 /* Implement timer_start (mon_start), timer_stop (mon_stop), timer_freq (mon_frequency) commands. */
-// LAB 5: Your code here:
+void print_timer_error(void);
 
 int
 mon_start(int argc, char **argv, struct Trapframe *tf) {
+    (void)tf;
+    if (argc != 2) {
+        print_timer_error();
+        return 0;
+    }
+
+    timer_start(argv[1]);
     return 0;
 }
 
 int
 mon_stop(int argc, char **argv, struct Trapframe *tf) {
+    (void)tf;
+    if (argc != 1) {
+        print_timer_error();
+        return 0;
+    }
+
+    timer_stop();
     return 0;
 }
 
 int
 mon_frequency(int argc, char **argv, struct Trapframe *tf) {
+    (void)tf;
+    if (argc != 2) {
+        print_timer_error();
+        return 0;
+    }
+
+    timer_cpu_frequency(argv[1]);
     return 0;
 }
 

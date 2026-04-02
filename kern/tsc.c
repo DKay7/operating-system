@@ -191,8 +191,6 @@ print_timer_error(void) {
 /* Use print_time function to print timert result
  * Use print_timer_error function to print error. */
 
-// LAB 5: Your code here:
-
 static bool timer_started = 0;
 static int timer_id = -1;
 static uint64_t timer = 0;
@@ -200,16 +198,61 @@ static uint64_t freq = 0;
 
 void
 timer_start(const char *name) {
-    (void)timer_started;
-    (void)timer_id;
-    (void)timer;
-    (void)freq;
+    struct Timer *selected = NULL;
+
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timertab[i].timer_name && !strcmp(timertab[i].timer_name, name)) {
+            selected = &timertab[i];
+            timer_id = i;
+            break;
+        }
+    }
+
+    if (!selected || !selected->get_cpu_freq) {
+        print_timer_error();
+        timer_started = 0;
+        timer_id = -1;
+        return;
+    }
+
+    freq = selected->get_cpu_freq();
+    timer = read_tsc();
+    timer_started = 1;
 }
 
 void
 timer_stop(void) {
+    uint64_t elapsed_tsc;
+
+    if (!timer_started || timer_id < 0 || !freq) {
+        print_timer_error();
+        return;
+    }
+
+    elapsed_tsc = read_tsc() - timer;
+    print_time((unsigned)((elapsed_tsc + freq / 2) / freq));
+
+    timer_started = 0;
+    timer_id = -1;
+    timer = 0;
+    freq = 0;
 }
 
 void
 timer_cpu_frequency(const char *name) {
+    struct Timer *selected = NULL;
+
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timertab[i].timer_name && !strcmp(timertab[i].timer_name, name)) {
+            selected = &timertab[i];
+            break;
+        }
+    }
+
+    if (!selected || !selected->get_cpu_freq) {
+        print_timer_error();
+        return;
+    }
+
+    cprintf("%llu\n", (unsigned long long)selected->get_cpu_freq());
 }

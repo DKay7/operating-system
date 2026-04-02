@@ -101,8 +101,10 @@ trap_init(void) {
     // LAB 4: Your code here
     extern void (*clock_thdlr)(void);
     // LAB 5: Your code here
+    extern void (*timer_thdlr)(void);
 
     idt[IRQ_CLOCK + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&clock_thdlr), 0);
+    idt[IRQ_TIMER + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&timer_thdlr), 0);
     
     /* Per-CPU setup */
     trap_init_percpu();
@@ -224,6 +226,10 @@ trap_dispatch(struct Trapframe *tf) {
         // rtc_timer_pic_handle();
         
         // LAB 5: Your code here
+        if (!timer_for_schedule || !timer_for_schedule->handle_interrupts)
+            panic("No timer interrupt handler configured");
+        timer_for_schedule->handle_interrupts();
+        sched_yield();
         return;
     default:
         print_trapframe(tf);

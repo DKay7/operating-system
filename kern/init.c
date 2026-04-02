@@ -17,6 +17,7 @@
 #include <kern/kclock.h>
 #include <kern/kdebug.h>
 #include <kern/traceopt.h>
+#include <kern/alloc.h>
 
 void
 timers_init(void) {
@@ -142,6 +143,7 @@ i386_init(void) {
 
     pic_init();
     timers_init();
+    alloc_init();
 
     /* Framebuffer init should be done after memory init */
     fb_init();
@@ -156,25 +158,18 @@ i386_init(void) {
     timers_schedule("hpet0");
 
 #ifdef CONFIG_KSPACE
-    /* Touch all you want */
-    ENV_CREATE_KERNEL_TYPE(prog_test1);
-    ENV_CREATE_KERNEL_TYPE(prog_test2);
-    ENV_CREATE_KERNEL_TYPE(prog_test3);
-    ENV_CREATE_KERNEL_TYPE(prog_test4);
-    ENV_CREATE_KERNEL_TYPE(prog_test5);
-    ENV_CREATE_KERNEL_TYPE(prog_test6);
+    /* For lab5 we want the kernel monitor, not these endless test programs. */
 #else
 
 #if LAB >= 10
-    ENV_CREATE(fs_fs, ENV_TYPE_FS);
+    /* Same idea here: keep the monitor available for timer commands. */
 #endif
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
     ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
-    /* Touch all you want. */
-    ENV_CREATE(user_hello, ENV_TYPE_USER);
+    /* Don't auto-start user programs here, we need to land in the monitor. */
 #endif /* TEST* */
 #endif
     
