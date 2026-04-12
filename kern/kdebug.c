@@ -8,6 +8,7 @@
 #include <inc/x86.h>
 
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 #include <kern/env.h>
 #include <inc/uefi.h>
 #include <stdint.h>
