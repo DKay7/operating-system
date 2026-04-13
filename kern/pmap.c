@@ -1,5 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
+#include "inc/memlayout.h"
+#include "inc/stdio.h"
 #include <inc/assert.h>
 #include <inc/error.h>
 #include <inc/mmu.h>
@@ -12,6 +14,7 @@
 #include <kern/pmap.h>
 #include <kern/traceopt.h>
 #include <kern/trap.h>
+#include <stdint.h>
 
 /*
  * Term "page" used here does not
@@ -82,7 +85,11 @@ list_init(struct List *list) {
  */
 inline static void __attribute__((always_inline))
 list_append(struct List *list, struct List *new) {
-    // LAB 6: Your code here
+    struct List *old_next = list->next;
+    list->next = new;
+    new->prev = list;
+    new->next = old_next;
+    old_next->prev = new;
 }
 
 /*
@@ -92,6 +99,11 @@ list_append(struct List *list, struct List *new) {
 inline static struct List *__attribute__((always_inline))
 list_del(struct List *list) {
     // LAB 6: Your code here
+
+    list->prev->next = list->next;
+    list->next->prev = list->prev;
+
+    list_init(list);
 
     return list;
 }
@@ -169,12 +181,26 @@ free_desc_rec(struct Page *p) {
  */
 static struct Page *
 alloc_child(struct Page *parent, bool right) {
-    assert_physical(parent);
     assert(parent);
+    assert_physical(parent);
 
-    // LAB 6: Your code here
+    struct Page *new = alloc_descriptor(parent->state);
+    list_init(&new->head);
 
-    struct Page *new = NULL;
+    new->parent = parent;
+    new->class = parent->class - 1;
+
+    new->refc = (parent->refc == 0) ? 0 : 1;
+    new->state = parent->state;
+
+    if (right) {
+        new->addr = parent->addr + (1ull << new->class);
+        parent->right = new;
+    } else {
+        new->addr = parent->addr;
+        parent->left = new;
+    }
+
 
     return new;
 }
@@ -305,15 +331,22 @@ static void
 attach_region(uintptr_t start, uintptr_t end, enum PageState type) {
     if (trace_memory_more)
         cprintf("Attaching memory region [%08lX, %08lX] with type %d\n", start, end - 1, type);
-    int class = 0, res = 0;
-
-    (void)class;
-    (void)res;
+    int saved_class = 0;
 
     start = ROUNDDOWN(start, CLASS_SIZE(0));
     end = ROUNDUP(end, CLASS_SIZE(0));
 
-    // LAB 6: Your code here
+    while (start < end) {
+
+        for (int class = 0; start + CLASS_SIZE(class) <= end && class < MAX_CLASS; ++class) {
+            if ((start & CLASS_MASK(class)) == 0) // check that block start is aligned bt size
+                saved_class = class;
+        }
+
+        page_lookup(NULL, start, saved_class, type, true);
+        start += CLASS_SIZE(saved_class);
+        saved_class = 0;
+    }
 }
 
 /*
@@ -423,7 +456,25 @@ dump_virtual_tree(struct Page *node, int class) {
 
 void
 dump_memory_lists(void) {
+
     // LAB 6: Your code here
+
+    for (int class_idx = 0; class_idx < MAX_CLASS; class_idx++) {
+
+        struct List *head = &free_classes[class_idx];
+
+        for (struct List *cur = head->next; cur != head; cur = cur->next) {
+
+            // I hate it, but we could do this since free_classes actually stores struct Page, but casted to list
+            struct Page *cur_page = (struct Page *)cur;
+
+            physaddr_t paddr = page2pa(cur_page);
+            uintptr_t class_size = CLASS_SIZE(cur_page->class);
+
+            cprintf("Class #%d: paddr = %08lX\tsize = %8ld\n", class_idx, paddr, class_size);
+
+        }
+    }
 }
 
 
@@ -521,12 +572,12 @@ detect_memory(void) {
     /* Attach reserved regions */
 
     /* Attach first page as reserved memory */
-    // LAB 6: Your code here
+    attach_region(0, CLASS_SIZE(0), RESERVED_NODE);
 
     /* Attach kernel and old IO memory
      * (from IOPHYSMEM to the physical address of end label. end points the the
      *  end of kernel executable image.)*/
-    // LAB 6: Your code here
+    attach_region(IOPHYSMEM, PADDR(end), RESERVED_NODE);
 
     /* Detect memory via ether UEFI or CMOS */
     if (uefi_lp && uefi_lp->MemoryMap) {
@@ -553,8 +604,7 @@ detect_memory(void) {
 
             /* Attach memory described by memory map entry described by start
              * of type type*/
-            // LAB 6: Your code here
-            (void)type;
+            attach_region(start->PhysicalStart, start->NumberOfPages * EFI_PAGE_SIZE + start->PhysicalStart, type);
 
             start = (void *)((uint8_t *)start + uefi_lp->MemoryMapDescriptorSize);
         }
