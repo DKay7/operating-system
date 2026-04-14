@@ -636,7 +636,6 @@ dump_memory_lists(void) {
             uintptr_t class_size = CLASS_SIZE(cur_page->class);
 
             cprintf("Class #%d: paddr = %08lX\tsize = %8ld\n", class_idx, paddr, class_size);
-
         }
     }
 }
@@ -759,7 +758,17 @@ memcpy_page(struct AddressSpace *dst, uintptr_t va, struct Page *page) {
     assert(current_space);
     assert(dst);
 
-    // LAB 7: Your code here
+    struct AddressSpace *old_as = switch_address_space(dst);
+
+    uintptr_t old_cr0 = rcr0();
+    set_wp(0);
+
+    nosan_memcpy((void *)va, KADDR(page2pa(page)), CLASS_SIZE(page->class));
+
+    // restores WP and all other bits in CR0
+    lcr0(old_cr0);
+
+    switch_address_space(old_as);
 }
 
 static void
@@ -832,17 +841,24 @@ unmap_page(struct AddressSpace *spc, uintptr_t addr, int class) {
         inval_end = ROUNDUP(inval_end, 1 * GB);
         assert(!res);
     }
+
     pde_t *pd = KADDR(PTE_ADDR(pdp[pdpi0]));
-    (void)pd;
 
     /* Unmap 2 MB hw pages if requested virtual page size is larger than
      * or equal 2 MB.
      * Use remove_pt() here. remove_pt() can handle recursive removal.
      * TIP: this resembles closely unmapping code */
 
-    // LAB 7: Your code here
 
-    size_t pdi0 = 0, pdi1 = 0;
+    size_t pdi0 = PD_INDEX(addr), pdi1 = PD_INDEX(end);
+    if (pdi0 > pdi1)
+        pdi1 = PD_ENTRY_COUNT;
+
+    // if size >= 2Mb can remove page here, otherwise should go deeper
+    if (class >= 9) {
+        remove_pt(pd, addr, 2 * MB, pdi0, pdi1);
+        goto finish;
+    }
 
     /* Return if page is not present or
      * split 2*MB page into 4KB pages if required.
@@ -852,10 +868,29 @@ unmap_page(struct AddressSpace *spc, uintptr_t addr, int class) {
      * (just like is above for 1BG pages)
      */
 
-    // LAB 7: Your code here
+    // if next level entry is not presented, then return
+    if (!(pd[pdi0] & PTE_P))
+        return;
 
-    (void)pdi0, (void)pdi1;
-    pte_t *pt = NULL;
+    // if we have to unmap smaller pages, but PageSize bit is set,
+    // then we have to split it into next level entries
+    else if (pd[pdi0] & PTE_PS) {
+        pde_t old = pd[pdi0];
+
+        res = alloc_pt(pd + pdi0);
+        assert(!res);
+
+        pte_t *pt = KADDR(PTE_ADDR(pd[pdi0]));
+
+        res = alloc_fill_pt(pt, old & ~PTE_PS, 4 * KB, 0, PT_ENTRY_COUNT);
+
+        inval_start = ROUNDDOWN(inval_start, 2 * MB);
+        inval_end = ROUNDUP(inval_end, 2 * MB);
+        assert(!res);
+    }
+
+
+    pte_t *pt = KADDR(PTE_ADDR(pd[pdi0]));
 
     /* Unmap 4KB hw pages */
     size_t pti0 = PT_INDEX(addr), pti1 = PT_INDEX(end);
@@ -957,19 +992,37 @@ map_page(struct AddressSpace *spc, uintptr_t addr, struct Page *page, int flags)
 
     /* Calculate indexes and fill PD range if page size is larger than 2MB */
 
-    // LAB 7: Your code here
-    (void)pd;
-    size_t pdi0 = 0, pdi1 = 0;
+    size_t pdi0 = PD_INDEX(addr), pdi1 = PD_INDEX(end);
+    if (pdi0 > pdi1)
+        pdi1 = PD_ENTRY_COUNT;
+
+    // if page size is larger than 2 MB, we could allocate it on this level
+    // and dont bother ourselves with other levels creation
+    if (page->class >= 9)
+        return alloc_fill_pt(pd, base, 2 * MB, pdi0, pdi1);
 
     /* Allocate empty pt or split 2MB page into 4KB pages if required and
      * calculate virtual address into pt.
      * alloc_pt(), alloc_fill_pt() are used here.
      * TIP: Look at the code above doing the same thing for 1GB pages */
 
-    // LAB 7: Your code here
+    // allocate empty pt
+    if (!(pd[pdi0] & PTE_P) && alloc_pt(pd + pdi0) < 0) {
+        return -E_NO_MEM;
+    } else if (pd[pdi0] & PTE_PS) {
+        // or split 2MB page into 4KB pages if required*/
+        pde_t old = pd[pdi0];
 
-    (void)pdi0, (void)pdi1;
-    pte_t *pt = NULL;
+        if (alloc_pt(pd + pdi0) < 0)
+            return -E_NO_MEM;
+
+        pte_t *pt = KADDR(PTE_ADDR(pd[pdi0]));
+
+        if (alloc_fill_pt(pt, old & ~PTE_PS, 4 * KB, 0, PT_ENTRY_COUNT) < 0)
+            return -E_NO_MEM;
+    }
+
+    pte_t *pt = KADDR(PTE_ADDR(pd[pdi0]));
 
     /* If requested region is larger than or equal to 4KB (at least one whole page) */
 
@@ -1451,9 +1504,15 @@ release_address_space(struct AddressSpace *space) {
 struct AddressSpace *
 switch_address_space(struct AddressSpace *space) {
     assert(space);
-    // LAB 7: Your code here
 
-    return NULL;
+    if (space == current_space)
+        return current_space;
+
+    struct AddressSpace *old = current_space;
+    current_space = space;
+    lcr3(current_space->cr3);
+
+    return old;
 }
 
 /* Buffers for filler pages are statically allocated for simplicity
