@@ -8,6 +8,7 @@
 #include <Library/DebugLib.h>
 #include "Bootloader.h"
 #include "AutoGen.h"
+#include "Library/MemoryAllocationLib.h"
 #include "Library/UefiBootServicesTableLib.h"
 #include "printf.h"
 #include "Protocol/GraphicsOutput.h"
@@ -118,13 +119,33 @@ InitGraphics (
   // Hint: Use QueryMode/SetMode functions.
   //
   
-  
-  GraphicsOutput->SetMode(GraphicsOutput, GraphicsOutput->Mode->Mode);
+  UINTN InfoSize = 0;
+  EFI_GRAPHICS_OUTPUT_MODE_INFORMATION    *Info = NULL;
+  CONST UINT32 ModeNum = 7;
 
-  GraphicsOutput->QueryMode(GraphicsOutput, GraphicsOutput->Mode->Mode, 
-                            &GraphicsOutput->Mode->SizeOfInfo, 
-                            &GraphicsOutput->Mode->Info);
+  Status = GraphicsOutput->QueryMode(GraphicsOutput, ModeNum, &InfoSize, &Info);
+ 
+  ASSERT(!EFI_ERROR(Status));
     
+  GraphicsOutput->SetMode(GraphicsOutput, ModeNum);
+  FreePool(Info);
+
+
+  /* UINTN Index = 0; */
+  /* UINT32 MaxModes = GraphicsOutput->Mode->MaxMode; */
+  /* for (; Index < MaxModes; ++Index) { */
+  /*    */
+  /*   Status = GraphicsOutput->QueryMode(GraphicsOutput, Index, &InfoSize, &Info); */
+  /**/
+  /*   DEBUG ((DEBUG_ERROR, "idx = %d: %ld x %ld\n", Index, Info->HorizontalResolution, Info->VerticalResolution)); */
+  /**/
+  /*   if (EFI_ERROR(Status)) { */
+  /*     continue; */
+  /*   } */
+  /*    */
+  /*   GraphicsOutput->SetMode(GraphicsOutput, Index); */
+  /*   FreePool(Info); */
+  /* } */
 
   //
   // Fill screen with black.
@@ -287,7 +308,7 @@ GetKernelFile (
   // get loader's containing device.
   //
 
-  Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (void**)&LoadedImage);
+  Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find LoadedImage protocol - %r\n", Status));
@@ -303,9 +324,9 @@ GetKernelFile (
   // Use gBS->HandleProtocol() to find file system protocol
   // (use gEfiSimpleFileSystemProtocolGuid) from LoadedImage->DeviceHandle
   // to read the kernel from it later.
-  //
+  
   // LAB 1: Your code here
-  Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&FileSystem);
+  Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find own FileSystem protocol - %r\n", Status));
@@ -317,7 +338,7 @@ GetKernelFile (
   // NOTE: Don't forget to Use ->Close after you've done using it.
   //
   // LAB 1: Your code here
-  FileSystem->OpenVolume(FileSystem, &CurrentDriveRoot);
+  Status = FileSystem->OpenVolume(FileSystem, &CurrentDriveRoot);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
