@@ -614,8 +614,51 @@ check_virtual_tree(struct Page *page, int class) {
  * Pretty-print virtual memory tree
  */
 void
+dump_virtual_tree_at(struct Page *node, uintptr_t va, int class) {
+    if (!node)
+        return;
+
+    assert_virtual(node);
+    assert(class >= 0);
+
+    if (node->state == INTERMEDIATE_NODE) {
+        assert(class > 0);
+
+        dump_virtual_tree_at(node->left, va, class - 1);
+        dump_virtual_tree_at(node->right, va + CLASS_SIZE(class - 1), class - 1);
+    } else if ((node->state & NODE_TYPE_MASK) == MAPPING_NODE) {
+        uint64_t size = CLASS_SIZE(class);
+        cprintf("node: [%p; %p) -> [%p; %p) (+%lu) %c%c%c\n",
+                (void *)va, (void *)(va + size),
+                (void *)page2pa(node->phy), (void *)(page2pa(node->phy) + size), size,
+                node->state & PROT_R ? 'R' : '-',
+                node->state & PROT_W ? 'W' : '-',
+                node->state & PROT_X ? 'X' : '-');
+    }
+}
+
+void
 dump_virtual_tree(struct Page *node, int class) {
     // LAB 7: Your code here
+    if (!node)
+        return;
+
+    assert_virtual(node);
+
+    // compute VA in case we starting not from root node...
+    uintptr_t va = 0;
+    struct Page *cur = node;
+    int cur_class = class;
+
+    while (cur->parent) {
+        if (cur->parent->right == cur)
+            va += CLASS_SIZE(cur_class);
+
+        cur = cur->parent;
+        cur_class++;
+    }
+
+    dump_virtual_tree_at(node, va, class);
 }
 
 void
@@ -650,10 +693,51 @@ dump_memory_lists(void) {
  */
 void
 dump_page_table(pte_t *pml4) {
-    uintptr_t addr = 0;
     cprintf("Page table:\n");
     // LAB 7: Your code here
-    (void)addr;
+    
+    for (size_t pml4i = 0; pml4i < PML4_ENTRY_COUNT; pml4i++) {
+        if (!(pml4[pml4i] & PTE_P))
+            continue;
+
+        dump_entry(pml4[pml4i], 512 * GB, 0);
+
+        assert(!(pml4[pml4i] & PTE_PS));
+        pdpe_t *pdp = KADDR(PTE_ADDR(pml4[pml4i]));
+
+        for (size_t pdpi = 0; pdpi < PDP_ENTRY_COUNT; pdpi++) {
+            if (!(pdp[pdpi] & PTE_P))
+                continue;
+
+            if (pdp[pdpi] & PTE_PS) {
+                dump_entry(pdp[pdpi], 1 * GB, 1);
+                continue;
+            }
+
+            dump_entry(pdp[pdpi], 1 * GB, 0);
+            pde_t *pd = KADDR(PTE_ADDR(pdp[pdpi]));
+
+            for (size_t pdi = 0; pdi < PD_ENTRY_COUNT; pdi++) {
+                if (!(pd[pdi] & PTE_P))
+                    continue;
+
+                if (pd[pdi] & PTE_PS) {
+                    dump_entry(pd[pdi], 2 * MB, 1);
+                    continue;
+                }
+
+                dump_entry(pd[pdi], 2 * MB, 0);
+                pte_t *pt = KADDR(PTE_ADDR(pd[pdi]));
+
+                for (size_t pti = 0; pti < PT_ENTRY_COUNT; pti++) {
+                    if (!(pt[pti] & PTE_P))
+                        continue;
+
+                    dump_entry(pt[pti], 4 * KB, 1);
+                }
+            }
+        }
+    }
 }
 
 inline static int
@@ -1776,6 +1860,7 @@ init_memory(void) {
     // LAB 7: Your code here
     // NOTE: You need to check if map_physical_region returned 0 everywhere! (and panic otherwise)
     // Map [0, max_memory_map_addr] to [KERN_BASE_ADDR, KERN_BASE_ADDR + max_memory_map_addr] as RW- + ALLOC_WEAK
+    res = map_physical_region(&kspace, KERN_BASE_ADDR, 0, max_memory_map_addr, PROT_R | PROT_W | ALLOC_WEAK);
 
     assert(!res);
 
@@ -1789,14 +1874,20 @@ init_memory(void) {
     assert(__text_end - __text_start < MAX_LOW_ADDR_KERN_SIZE);
     assert((uintptr_t)(end - KERN_BASE_ADDR) < MIN(BOOT_MEM_SIZE, max_memory_map_addr));
 
+    res = map_physical_region(&kspace, (uintptr_t)__text_start, PADDR(__text_start), (__text_end - __text_start), PROT_R | PROT_X);
+
     assert(!res);
 
     /* Allocate kernel stacks */
 
     // LAB 7: Your code here
     // Map [PADDR(bootstack), PADDR(bootstack) + KERN_STACK_SIZE] to [KERN_STACK_TOP - KERN_STACK_SIZE, KERN_STACK_TOP] as RW-
-    // Map [PADDR(pfstack), PADDR(pfstack) + KERN_PF_STACK_SIZE] to [KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE, KERN_PF_STACK_TOP] as RW-
+
+    res = map_physical_region(&kspace, KERN_STACK_TOP - KERN_STACK_SIZE, PADDR(bootstack), KERN_STACK_SIZE, PROT_R | PROT_W);
     assert(!res);
+
+    // Map [PADDR(pfstack), PADDR(pfstack) + KERN_PF_STACK_SIZE] to [KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE, KERN_PF_STACK_TOP] as RW-
+    res = map_physical_region(&kspace, KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE, PADDR(pfstack), KERN_PF_STACK_SIZE, PROT_R | PROT_W);
     assert(!res);
 
 #ifdef SANITIZE_SHADOW_BASE
@@ -1810,6 +1901,9 @@ init_memory(void) {
             // LAB 7: Your code here
             // Map [mstart->PhysicalStart, mstart->PhysicalStart+mstart->NumberOfPages*PAGE_SIZE] to
             //     [mstart->VirtualStart, mstart->VirtualStart+mstart->NumberOfPages*PAGE_SIZE] as RW-
+
+            res = map_physical_region(&kspace, mstart->VirtualStart, mstart->PhysicalStart,
+                                      mstart->NumberOfPages * PAGE_SIZE, PROT_R | PROT_W);
             assert(!res);
         }
     }
@@ -1868,19 +1962,40 @@ init_memory(void) {
     // LAB 7: Your code here
     // Map [uefi_lp->FrameBufferBase, uefi_lp->FrameBufferBase + uefi_lp->FrameBufferSize] to
     //     [FRAMEBUFFER, FRAMEBUFFER + uefi_lp->FrameBufferSize] RW- + PROT_WC
+
+    res = map_physical_region(&kspace, FRAMEBUFFER, uefi_lp->FrameBufferBase,
+                              uefi_lp->FrameBufferSize, PROT_R | PROT_W | PROT_WC);
+
+    assert(!res);
+
     // Map [0, MIN(MAX_LOW_ADDR_KERN_SIZE, max_memory_map_addr)] to
     //     [X86ADDR(KERN_BASE_ADDR),X86ADDR(KERN_BASE_ADDR) + MIN(MAX_LOW_ADDR_KERN_SIZE, max_memory_map_addr)] as RW + ALLOC_WEAK
+
+    res = map_physical_region(&kspace, X86ADDR(KERN_BASE_ADDR), 0,
+                              MIN(MAX_LOW_ADDR_KERN_SIZE, max_memory_map_addr), PROT_R | PROT_W | ALLOC_WEAK);
+
+    assert(!res);
+
     // Map [PADDR(__text_start), ROUNDUP(__text_end, CLASS_SIZE(0))] to
     //     [X86ADDR((uintptr_t)__text_start),ROUNDUP(X86ADDR((uintptr_t)__text_end), CLASS_SIZE(0))] as R-X
+
+    res = map_physical_region(&kspace, X86ADDR((uintptr_t)__text_start), PADDR(__text_start),
+                              ROUNDUP(PADDR(__text_end), CLASS_SIZE(0)) - PADDR(__text_start), PROT_R | PROT_X);
+    assert(!res);
+
     // Map [PADDR(bootstack), PADDR(boottop)] to
     //     [X86ADDR(KERN_STACK_TOP - KERN_STACK_SIZE), KERN_STACK_TOP] as RW-
+
+    res = map_physical_region(&kspace, X86ADDR(KERN_STACK_TOP - KERN_STACK_SIZE), PADDR(bootstack),
+                              KERN_STACK_SIZE, PROT_R | PROT_W);
+
+    assert(!res);
+
     // Map [PADDR(pfstack), PADDR(pfstacktop)] to
     //     [X86ADDR(KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE), KERN_PF_STACK_TOP] as RW-
 
-    assert(!res);
-    assert(!res);
-    assert(!res);
-    assert(!res);
+    res = map_physical_region(&kspace, X86ADDR(KERN_PF_STACK_TOP - KERN_PF_STACK_SIZE), PADDR(pfstack),
+                              KERN_PF_STACK_SIZE, PROT_R | PROT_W);
     assert(!res);
 
     if (trace_memory_more) dump_page_table(kspace.pml4);
