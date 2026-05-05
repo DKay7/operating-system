@@ -8,6 +8,7 @@
 #include <Library/DebugLib.h>
 #include "Bootloader.h"
 #include "AutoGen.h"
+#include "Base.h"
 #include "Library/MemoryAllocationLib.h"
 #include "Library/UefiBootServicesTableLib.h"
 #include "printf.h"
@@ -121,32 +122,30 @@ InitGraphics (
   
   UINTN InfoSize = 0;
   EFI_GRAPHICS_OUTPUT_MODE_INFORMATION    *Info = NULL;
-  CONST UINT32 ModeNum = 7;
 
-  Status = GraphicsOutput->QueryMode(GraphicsOutput, ModeNum, &InfoSize, &Info);
- 
-  ASSERT(!EFI_ERROR(Status));
+  UINT32 MaxModes = GraphicsOutput->Mode->MaxMode;
+  INT64 Index = MaxModes;
+  BOOLEAN ModeWasSet = FALSE;
+
+  for (; Index >= 0; --Index) {
     
-  GraphicsOutput->SetMode(GraphicsOutput, ModeNum);
-  FreePool(Info);
+    Status = GraphicsOutput->QueryMode(GraphicsOutput, Index, &InfoSize, &Info);
 
-
-  /* UINTN Index = 0; */
-  /* UINT32 MaxModes = GraphicsOutput->Mode->MaxMode; */
-  /* for (; Index < MaxModes; ++Index) { */
-  /*    */
-  /*   Status = GraphicsOutput->QueryMode(GraphicsOutput, Index, &InfoSize, &Info); */
-  /**/
-  /*   DEBUG ((DEBUG_ERROR, "idx = %d: %ld x %ld\n", Index, Info->HorizontalResolution, Info->VerticalResolution)); */
-  /**/
-  /*   if (EFI_ERROR(Status)) { */
-  /*     continue; */
-  /*   } */
-  /*    */
-  /*   GraphicsOutput->SetMode(GraphicsOutput, Index); */
-  /*   FreePool(Info); */
-  /* } */
-
+    if (EFI_ERROR(Status)) {
+      continue;
+    }
+    
+    Status = GraphicsOutput->SetMode(GraphicsOutput, Index);
+    ModeWasSet = !EFI_ERROR(Status);
+    FreePool(Info);
+    break;
+  }
+  
+  if (!ModeWasSet) {
+    DEBUG ((DEBUG_ERROR, "JOS: Cannot set any of graphic modes - %r\n", Status));
+    return Status;
+  }
+    
   //
   // Fill screen with black.
   //
