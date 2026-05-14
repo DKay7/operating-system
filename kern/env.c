@@ -215,29 +215,44 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
         break;
     }
 
-    strtab_hdr = &section_headers[symtab_hdr->sh_link];
-
     assert(symtab_hdr != NULL);
+    assert(symtab_hdr->sh_link < header.e_shnum);
+
+    strtab_hdr = &section_headers[symtab_hdr->sh_link];
     assert(strtab_hdr != NULL);
+    assert(symtab_hdr->sh_offset + symtab_hdr->sh_size <= size);
+    assert(strtab_hdr->sh_offset + strtab_hdr->sh_size <= size);
 
     struct Elf64_Sym *symtab_start = (struct Elf64_Sym *)(binary + symtab_hdr->sh_offset);
     struct Elf64_Sym *symtab_end = (struct Elf64_Sym *)((uint8_t *)symtab_start + symtab_hdr->sh_size);
     uint8_t *strtab = binary + strtab_hdr->sh_offset;
 
-    const char *core_functions[] = {"sys_exit", "sys_yield", "cprintf"}; // FIXME how to define set of core functions
+    (void)env;
 
-    const int64_t core_functions_size = sizeof(core_functions) / sizeof(core_functions[0]);
+    for (struct Elf64_Sym *sym = symtab_start + 1; sym < symtab_end; ++sym) {
+        uintptr_t sym_addr = (uintptr_t)sym->st_value;
+        const char *sym_name = (const char *)(strtab + sym->st_name);
 
-    for (int idx = 0; idx < core_functions_size; ++idx) {
-        uintptr_t sym_addr = 0;
-        int ret = find_addr_in_symtab(symtab_start, symtab_end, strtab, core_functions[idx], &sym_addr);
-
-        if (ret != 0)
+        if (ELF64_ST_BIND(sym->st_info) != STB_GLOBAL)
+            continue;
+        if (ELF64_ST_TYPE(sym->st_info) != STT_OBJECT)
+            continue;
+        if (sym->st_shndx == ELF_SHN_UNDEF)
+            continue;
+        if (sym->st_size != sizeof(uintptr_t))
+            continue;
+        if (!sym_name || !*sym_name)
+            continue;
+        if (sym_addr < image_start || sym_addr + sizeof(uintptr_t) > image_end)
+            continue;
+        if (*(uintptr_t *)sym_addr != 0)
             continue;
 
-        // found kernel function in binary's symtab:
-        uintptr_t new_rip = find_function(core_functions[idx]);
-        *(uintptr_t *)sym_addr = new_rip;
+        uintptr_t func_addr = find_function(sym_name);
+        if (!func_addr)
+            continue;
+
+        *(uintptr_t *)sym_addr = func_addr;
     }
 
 
@@ -376,7 +391,7 @@ env_destroy(struct Env *env) {
 
     if (env == curenv) {
         env_free(env);
-        sys_yield();
+        sched_yield();
     } else {
         env_free(env);
     }

@@ -105,10 +105,11 @@ find_function(const char *const fname) {
     load_kernel_dwarf_info(&addrs);
 
     uintptr_t rip = 0;
-    int retval = address_by_fname(&addrs, fname, &rip);
+
+    int retval = naive_address_by_fname(&addrs, fname, &rip);
 
     if (retval != 0) {
-        retval = naive_address_by_fname(&addrs, fname, &rip);
+        retval = address_by_fname(&addrs, fname, &rip);
     }
 
     if (retval != 0) {
