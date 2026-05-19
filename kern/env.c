@@ -17,6 +17,7 @@
 #include <kern/macro.h>
 #include <kern/traceopt.h>
 #include <stdint.h>
+#include <stdalign.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -197,6 +198,9 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 
     /* NOTE: find_function from kdebug.c should be used */
 
+    // checking aligment
+    assert(((uintptr_t)binary % alignof(struct Elf)) == 0);
+
     struct Elf header = *(struct Elf *)binary;
 
     assert(header.e_shoff > 0);
@@ -220,6 +224,10 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 
     strtab_hdr = &section_headers[symtab_hdr->sh_link];
     assert(strtab_hdr != NULL);
+
+    // overflow checks
+    assert(symtab_hdr->sh_offset <= UINT64_MAX - symtab_hdr->sh_size);
+
     assert(symtab_hdr->sh_offset + symtab_hdr->sh_size <= size);
     assert(strtab_hdr->sh_offset + strtab_hdr->sh_size <= size);
 
@@ -252,7 +260,10 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
         if (!func_addr)
             continue;
 
-        *(uintptr_t *)sym_addr = func_addr;
+        typedef void (*func_t)(void);
+
+        func_t casted_func_ptr = (func_t)func_addr;
+        __builtin_memcpy((void *)sym_addr, &casted_func_ptr, sizeof(func_t));
     }
 
 
