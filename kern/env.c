@@ -1,6 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
 #include "inc/env.h"
+#include "inc/memlayout.h"
 #include "inc/stdio.h"
 #include "inc/types.h"
 #include <inc/x86.h>
@@ -99,9 +100,15 @@ env_init(void) {
      * kzalloc_region() only works with current_space != NULL */
     // LAB 8: Your code here
 
+    const size_t envs_size_rounded = ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE);
+    envs = kzalloc_region(envs_size_rounded);
+    assert(envs != NULL);
+
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
+    int retcode = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs, envs_size_rounded, PROT_USER_ | PROT_R);
+    assert(retcode == 0);
 
     /* Set up envs array */
 
@@ -307,6 +314,7 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
+    // LAB 8: Your code here
 
     uint64_t start_addr = INT64_MAX;
     uint64_t end_addr = 0;
@@ -314,22 +322,36 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     struct Elf header = *(struct Elf *)binary;
 
     if (header.e_magic != ELF_MAGIC)
-        return -1;
+        return -E_INVALID_EXE;
 
     struct Proghdr *prog_heades = (struct Proghdr *)(binary + header.e_phoff);
+
+    // since p.va is now at user space, we have to switch space before copying loadable segments
+    struct AddressSpace *cur_aspace = switch_address_space(&env->address_space);
 
     // reading prog_headers array
     for (int p_idx = 0; p_idx < header.e_phnum; ++p_idx) {
         struct Proghdr cur_ph = prog_heades[p_idx];
 
         if (cur_ph.p_filesz > cur_ph.p_memsz)
-            return -1;
+            return -E_INVALID_EXE;
 
         if (cur_ph.p_type != ELF_PROG_LOAD)
             continue;
 
-        // zeroing memory
-        memset((uint8_t *)cur_ph.p_va, 0, cur_ph.p_memsz);
+        // [dkay7]: gotta round-down addres of a p_va since its not aligned by page size
+        // also, no more need in zeroing memory since we use ALLOC_ZERO
+        uint64_t aligned_va = ROUNDDOWN(cur_ph.p_va, PAGE_SIZE);
+        uint64_t aligned_va_size = (cur_ph.p_va - aligned_va) + cur_ph.p_memsz;
+
+        int retcode =
+                map_region(current_space, aligned_va, NULL, 0, ROUNDUP(aligned_va_size, PAGE_SIZE),
+                           ALLOC_ZERO | PROT_USER_ | PROT_R | PROT_W | PROT_X);
+
+        if (retcode != 0) {
+            switch_address_space(cur_aspace);
+            return -E_INVALID_EXE;
+        }
 
         // copying code
         memcpy((uint8_t *)cur_ph.p_va, binary + cur_ph.p_offset, cur_ph.p_filesz);
@@ -340,15 +362,22 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         end_addr = potential_end_addr > end_addr ? potential_end_addr : end_addr;
     }
 
+    // [dkay]: have to map stack
+    int retcode = map_region(current_space, USER_STACK_TOP - USER_STACK_SIZE, NULL, 0, USER_STACK_SIZE,
+                             ALLOC_ZERO | PROT_USER_ | PROT_R | PROT_W);
+
+    if (retcode != 0)
+        return -E_INVALID_EXE;
+
     // set entry point into trapframe
     env->env_tf.tf_rip = (uintptr_t)header.e_entry;
-
     env->binary = binary;
 
-    bind_functions(env, binary, size, start_addr, end_addr);
+    // [dkay]: no more need in bind_functions since we're goint to implement syscalls
+    // bind_functions(env, binary, size, start_addr, end_addr);
 
-
-    // LAB 8: Your code here
+    // switch back
+    switch_address_space(cur_aspace);
 
     return 0;
 }
@@ -362,14 +391,17 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
-
-    struct Env *new_env = NULL;
-    env_alloc(&new_env, 0, type);
-    load_icode(new_env, binary, size);
-
-    new_env->env_type = ENV_TYPE_KERNEL;
     // LAB 8: Your code here
 
+    struct Env *new_env = NULL;
+    int ret = env_alloc(&new_env, 0, type);
+    assert(ret == 0);
+
+    ret = load_icode(new_env, binary, size);
+    assert(ret == 0);
+
+    new_env->env_parent_id = 0;
+    new_env->env_type = type;
 }
 
 
@@ -410,14 +442,16 @@ env_destroy(struct Env *env) {
 
     // LAB 3: Your code here
 
-    env->env_status = ENV_DYING;
-    if (env == curenv) {
-        env_free(env);
-        sys_yield();
-    } 
     /* Reset in_page_fault flags in case *current* environment
      * is getting destroyed after performing invalid memory access. */
     // LAB 8: Your code here
+
+    env->env_status = ENV_DYING;
+    if (env == curenv) {
+        env_free(env);
+        in_page_fault = false;
+        sched_yield();
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -503,16 +537,14 @@ env_run(struct Env *env) {
     // LAB 3: Your code here
     // LAB 8: Your code here
 
-    if (curenv) {
+    if (curenv && curenv->env_status == ENV_RUNNING)
+        curenv->env_status = ENV_RUNNABLE;
 
-        if (curenv->env_status == ENV_RUNNING) {
-            curenv->env_status = ENV_RUNNABLE;
-        }
-    }
 
     curenv = env;
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++; // env_runs is initialized to 0 in env_init(), so it's save to increment it
 
+    switch_address_space(&curenv->address_space);
     env_pop_tf(&curenv->env_tf);
 }

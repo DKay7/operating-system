@@ -1,6 +1,7 @@
 /* Called from entry.S to get us going.
  * entry.S already took care of defining envs, pages, uvpd, and uvpt */
 
+#include "inc/env.h"
 #include <inc/lib.h>
 #include <inc/x86.h>
 
@@ -24,6 +25,8 @@ libmain(int argc, char **argv) {
     /* Set thisenv to point at our Env structure in envs[]. */
 
     // LAB 8: Your code here
+    envid_t env_id = sys_getenvid();
+    thisenv = &envs[ENVX(env_id)];
 
     /* Save the name of the program so that panic() can use it */
     if (argc > 0) binaryname = argv[0];

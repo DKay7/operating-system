@@ -98,23 +98,66 @@ trapname(int trapno) {
     return "(unknown trap)";
 }
 
+// traps
+void t_divide();  /* divide error */
+void t_debug();   /* debug exception */
+void t_nmi();     /* non-maskable interrupt */
+void t_brkpt();   /* breakpoint */
+void t_oflow();   /* overflow */
+void t_bound();   /* bounds check */
+void t_illop();   /* illegal opcode */
+void t_device();  /* device not available */
+void t_dblflt();  /* double fault */
+void t_tss();     /* invalid task switch segment */
+void t_segnp();   /* segment not present */
+void t_stack();   /* stack exception */
+void t_gpflt();   /* general protection fault */
+void t_pgflt();   /* page fault */
+void t_fperr();   /* floating point error */
+void t_align();   /* aligment check */
+void t_mchk();    /* machine check */
+void t_simderr(); /* SIMD floating point error */
+void t_syscall();
+
+void clock_thdlr();
+void timer_thdlr();
+
 void
 trap_init(void) {
     // LAB 4: Your code here
-    extern void (*clock_thdlr)(void);
-    // LAB 5: Your code here
-    extern void (*timer_thdlr)(void);
-
     idt[IRQ_CLOCK + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&clock_thdlr), 0);
+
+    // LAB 5: Your code here
     idt[IRQ_TIMER + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&timer_thdlr), 0);
-    
+
     // LAB 8: Your code here
     /* Insert trap handlers into IDT */
+    // clang-format off
+    idt[T_DIVIDE]   = GATE(0, GD_KT, (uintptr_t)(&t_divide), 0);
+    idt[T_DEBUG]    = GATE(0, GD_KT, (uintptr_t)(&t_debug), 0);
+    idt[T_NMI]      = GATE(0, GD_KT, (uintptr_t)(&t_nmi), 0);
+    idt[T_OFLOW]    = GATE(0, GD_KT, (uintptr_t)(&t_oflow), 0);
+    idt[T_BOUND]    = GATE(0, GD_KT, (uintptr_t)(&t_bound), 0);
+    idt[T_ILLOP]    = GATE(0, GD_KT, (uintptr_t)(&t_illop), 0);
+    idt[T_DEVICE]   = GATE(0, GD_KT, (uintptr_t)(&t_device), 0);
+    idt[T_DBLFLT]   = GATE(0, GD_KT, (uintptr_t)(&t_dblflt), 0);
+    idt[T_TSS]      = GATE(0, GD_KT, (uintptr_t)(&t_tss), 0);
+    idt[T_SEGNP]    = GATE(0, GD_KT, (uintptr_t)(&t_segnp), 0);
+    idt[T_STACK]    = GATE(0, GD_KT, (uintptr_t)(&t_stack), 0);
+    idt[T_GPFLT]    = GATE(0, GD_KT, (uintptr_t)(&t_gpflt), 0);
+    idt[T_PGFLT]    = GATE(0, GD_KT, (uintptr_t)(&t_pgflt), 0);
+    idt[T_FPERR]    = GATE(0, GD_KT, (uintptr_t)(&t_fperr), 0);
+    idt[T_ALIGN]    = GATE(0, GD_KT, (uintptr_t)(&t_align), 0);
+    idt[T_MCHK]     = GATE(0, GD_KT, (uintptr_t)(&t_mchk), 0);
+    idt[T_SIMDERR]  = GATE(0, GD_KT, (uintptr_t)(&t_simderr), 0);
+
+    idt[T_BRKPT]    = GATE(0, GD_KT, (uintptr_t)(&t_brkpt), 3);
+    idt[T_SYSCALL]  = GATE(0, GD_KT, (uintptr_t)(&t_syscall), 3);
+    // clang-format on
 
     /* Setup #PF handler dedicated stack
      * It should be switched on #PF because
-     * #PF is the only kind of exception that
-     * can legally happen during normal kernel
+     * #PF is the only kind of exception that can legally happen during normal kernel
      * code execution */
     idt[T_PGFLT].gd_ist = 1;
 
@@ -233,9 +276,11 @@ trap_dispatch(struct Trapframe *tf) {
                 tf->tf_regs.reg_rsi,
                 tf->tf_regs.reg_r8);
         return;
+
     case T_BRKPT:
-        // LAB 8: Your code here.
+        monitor(tf);
         return;
+
     case IRQ_OFFSET + IRQ_SPURIOUS:
         /* Handle spurious interrupts
          * The hardware sometimes raises these because of noise on the
@@ -249,7 +294,7 @@ trap_dispatch(struct Trapframe *tf) {
     case IRQ_OFFSET + IRQ_TIMER:
         // LAB 4: Your code here
         // rtc_timer_pic_handle();
-        
+
         // LAB 5: Your code here
         if (!timer_for_schedule || !timer_for_schedule->handle_interrupts)
             panic("No timer interrupt handler configured");

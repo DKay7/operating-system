@@ -71,8 +71,25 @@ _alltraps:
     # NOTE: Members after tf_paddind4 already on stack.
     #       For struct PushRegs you can use PUSHA macro.
 
+    # Trapframe struct
+    subq $8, %rsp
+    movw %ds, (%rsp)
+
+    subq $8, %rsp
+    movw %es, (%rsp)
+
+    PUSHA
+
+    movw $GD_KD, %ax
+    movw %ax, %ds
+    movw %ax, %es
+
     # LAB 8: Your code here
     # Invoke `trap' with a pointer to struct trap as an argument.
+
+    # rdi = first arg <= stack with trapframe struct
+    movq %rsp, %rdi
+    call trap
 
     jmp .
 
@@ -81,4 +98,26 @@ _alltraps:
 # all trap handlers' entry points
 # (Look up their list in inc/trap.h)
 
+TRAPHANDLER_NOEC(t_divide,  T_DIVIDE)   /* divide error */
+TRAPHANDLER_NOEC(t_debug ,  T_DEBUG)    /* debug exception */
+TRAPHANDLER_NOEC(t_nmi   ,  T_NMI)      /* non-maskable interrupt */
+TRAPHANDLER_NOEC(t_brkpt ,  T_BRKPT)    /* breakpoint */
+TRAPHANDLER_NOEC(t_oflow ,  T_OFLOW)    /* overflow */
+TRAPHANDLER_NOEC(t_bound ,  T_BOUND)    /* bounds check */
+TRAPHANDLER_NOEC(t_illop ,  T_ILLOP)    /* illegal opcode */
+TRAPHANDLER_NOEC(t_device,  T_DEVICE)   /* device not available */
+TRAPHANDLER     (t_dblflt,  T_DBLFLT)   /* double fault */
+TRAPHANDLER     (t_tss,     T_TSS)      /* invalid task switch segment */
+TRAPHANDLER     (t_segnp,   T_SEGNP)    /* segment not present */
+TRAPHANDLER     (t_stack,   T_STACK)    /* stack exception */
+TRAPHANDLER     (t_gpflt,   T_GPFLT)    /* general protection fault */
+TRAPHANDLER     (t_pgflt,   T_PGFLT)    /* page fault */
+TRAPHANDLER_NOEC(t_fperr ,  T_FPERR)    /* floating point error */
+TRAPHANDLER     (t_align ,  T_ALIGN)    /* aligment check */
+TRAPHANDLER_NOEC(t_mchk  ,  T_MCHK)     /* machine check */
+TRAPHANDLER_NOEC(t_simderr, T_SIMDERR)  /* SIMD floating point error */
+TRAPHANDLER_NOEC(t_syscall, T_SYSCALL)
+
+TRAPHANDLER_NOEC(clock_thdlr, IRQ_OFFSET + IRQ_CLOCK)
+TRAPHANDLER_NOEC(timer_thdlr, IRQ_OFFSET + IRQ_TIMER)
 #endif

@@ -2,6 +2,7 @@
 
 #include "inc/memlayout.h"
 #include "inc/stdio.h"
+#include "inc/types.h"
 #include <inc/assert.h>
 #include <inc/error.h>
 #include <inc/mmu.h>
@@ -695,7 +696,7 @@ void
 dump_page_table(pte_t *pml4) {
     cprintf("Page table:\n");
     // LAB 7: Your code here
-    
+
     for (size_t pml4i = 0; pml4i < PML4_ENTRY_COUNT; pml4i++) {
         if (!(pml4[pml4i] & PTE_P))
             continue;
@@ -1604,16 +1605,22 @@ init_address_space(struct AddressSpace *space) {
     /* Allocte page table with alloc_pt into space->cr3
      * (remember to clean flag bits of result with PTE_ADDR) */
     // LAB 8: Your code here
+    alloc_pt(&space->cr3);
+    space->cr3 = PTE_ADDR(space->cr3);
 
     /* Put its kernel virtual address to space->pml4 */
     // LAB 8: Your code here
+    space->pml4 = KADDR(space->cr3);
 
     /* Allocate virtual tree root node
      * of type INTERMEDIATE_NODE with alloc_rescriptor() of type */
     // LAB 8: Your code here
+    space->root = alloc_descriptor(INTERMEDIATE_NODE);
+
 
     /* Initialize UVPT */
     // LAB 8: Your code here
+    space->pml4[PML4_INDEX(UVPML4)] = space->cr3 | PTE_P | PTE_U;
 
     /* Why this call is required here and what does it do? */
     propagate_one_pml4(space, &kspace);
@@ -2047,7 +2054,24 @@ static uintptr_t user_mem_check_addr;
 int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm) {
     // LAB 8: Your code here
-    return -E_FAULT;
+    const void *start_addr = ROUNDDOWN(va, PAGE_SIZE);
+    const void *end_addr = ROUNDUP(va + len, PAGE_SIZE);
+
+    for (void *addr = (void *)start_addr; addr < end_addr; addr += PAGE_SIZE) {
+        struct Page *addr_page = page_lookup_virtual(env->address_space.root, (uintptr_t)addr, 0, 0);
+
+        if (!addr_page || !addr_page->phy) {
+            user_mem_check_addr = (uintptr_t)va;
+            return -E_FAULT;
+        }
+
+        if ((PAGE_PROT(addr_page->state) & perm) != perm) {
+            user_mem_check_addr = (uintptr_t)va;
+            return -E_FAULT;
+        }
+    }
+
+    return 0;
 }
 
 void

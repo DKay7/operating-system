@@ -147,8 +147,9 @@ i386_init(void) {
 
     pic_init();
     timers_init();
+#ifdef CONFIG_KSPACE
     alloc_init();
-
+#endif
     /* Framebuffer init should be done after memory init */
     fb_init();
     if (trace_init) cprintf("Framebuffer initialised\n");

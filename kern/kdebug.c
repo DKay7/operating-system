@@ -1,3 +1,4 @@
+#include "inc/env.h"
 #include "inc/error.h"
 #include "inc/stdio.h"
 #include <inc/string.h>
@@ -51,12 +52,39 @@ load_user_dwarf_info(struct Dwarf_Addrs *addrs) {
             {&addrs->pubnames_end, &addrs->pubnames_begin, ".debug_pubnames"},
             {&addrs->pubtypes_end, &addrs->pubtypes_begin, ".debug_pubtypes"},
     };
+    const size_t target_sections_size = sizeof(sections) / sizeof(sections[0]);
 
     memset(addrs, 0, sizeof(*addrs));
 
     /* Load debug sections from curenv->binary elf image */
     // LAB 8: Your code here
-    (void)sections;
+
+    struct Elf header = *(struct Elf *)binary;
+
+    if (header.e_magic != ELF_MAGIC)
+        return;
+
+    struct Secthdr *sect_headers = (struct Secthdr *)(binary + header.e_shoff);
+    assert(header.e_shstrndx != 0);
+
+    struct Secthdr sect_name_tab_hdr = sect_headers[header.e_shstrndx];
+    const uint8_t *sect_name_tab = binary + sect_name_tab_hdr.sh_offset;
+
+    // reading prog_headers array
+    for (int p_idx = 0; p_idx < header.e_shnum; ++p_idx) {
+        struct Secthdr cur_sh = sect_headers[p_idx];
+        const char *sect_name = (char *)&sect_name_tab[cur_sh.sh_name];
+
+        for (int target_sec_idx = 0; target_sec_idx < target_sections_size; ++target_sec_idx) {
+            if (strcmp(sections[target_sec_idx].name, sect_name) == 0) {
+                *sections[target_sec_idx].start = (uint8_t *)(binary + cur_sh.sh_offset);
+                *sections[target_sec_idx].end = (uint8_t *)(binary + cur_sh.sh_offset + cur_sh.sh_size);
+                
+                // dkay: why whould we use user_mem_assert here??
+                // user_mem_assert(curenv, *sections[target_sec_idx].start, cur_sh.sh_size, PROT_R);
+            }
+        }
+    }
 }
 
 #define UNKNOWN       "<unknown>"
@@ -85,6 +113,7 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
      * Make sure that you fully understand why it is necessary. */
 
     // LAB 8: Your code here:
+    struct AddressSpace *cur_space = switch_address_space(&kspace);
 
     /* Load dwarf section pointers from either
      * currently running program binary or use
@@ -93,9 +122,12 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
      * or kernel space */
 
     // LAB 8: Your code here:
-
     struct Dwarf_Addrs addrs;
-    load_kernel_dwarf_info(&addrs);
+
+    if (addr <= MAX_USER_ADDRESS)
+        load_user_dwarf_info(&addrs);
+    else
+        load_kernel_dwarf_info(&addrs);
 
     Dwarf_Off offset = 0, line_offset = 0;
     int res = info_by_address(&addrs, addr, &offset);
@@ -130,6 +162,7 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     // LAB 2: Your res here:
 
 error:
+    switch_address_space(cur_space);
     return res;
 }
 

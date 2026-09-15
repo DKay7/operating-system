@@ -1,5 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
+#include "inc/syscall.h"
+#include "inc/stdio.h"
 #include <inc/x86.h>
 #include <inc/error.h>
 #include <inc/string.h>
@@ -18,11 +20,15 @@
  * The string is exactly 'len' characters long.
  * Destroys the environment on memory errors. */
 static int
-sys_cputs(const char *s, size_t len) {
+sys_cputs(const char* s, size_t len) {
     // LAB 8: Your code here
 
     /* Check that the user has permission to read memory [s, s+len).
      * Destroy the environment if not. */
+    user_mem_assert(curenv, s, len, PROT_R);
+
+    for (int i = 0; i < len; ++i)
+        cputchar(s[i]);
 
     return 0;
 }
@@ -32,8 +38,7 @@ sys_cputs(const char *s, size_t len) {
 static int
 sys_cgetc(void) {
     // LAB 8: Your code here
-
-    return 0;
+    return getchar();
 }
 
 /* Returns the current environment's envid. */
@@ -41,7 +46,7 @@ static envid_t
 sys_getenvid(void) {
     // LAB 8: Your code here
 
-    return 0;
+    return curenv->env_id;
 }
 
 /* Destroy a given environment (possibly the currently running environment).
@@ -52,16 +57,20 @@ sys_getenvid(void) {
 static int
 sys_env_destroy(envid_t envid) {
     // LAB 8: Your code here.
+    struct Env* env = NULL;
+    int retcode = envid2env(envid, &env, false);
+    if (retcode != 0)
+        return -E_BAD_ENV;
 
-#if 0 /* TIP: Use this snippet to log required for passing grade tests info */
+    /* TIP: Use this snippet to log required for passing grade tests info */
     if (trace_envs) {
         cprintf(env == curenv ?
                         "[%08x] exiting gracefully\n" :
                         "[%08x] destroying %08x\n",
                 curenv->env_id, env->env_id);
     }
-#endif
 
+    env_destroy(env);
     return 0;
 }
 
@@ -71,7 +80,21 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
     /* Call the function corresponding to the 'syscallno' parameter.
      * Return any appropriate return value. */
 
+    if (syscallno >= NSYSCALLS)
+        return -E_NO_SYS;
+
     // LAB 8: Your code here
+    switch (syscallno) {
+    case SYS_cgetc:
+        return sys_cgetc();
+    case SYS_cputs:
+        return sys_cputs((const char*)a1, (size_t)a2);
+    case SYS_env_destroy:
+        return sys_env_destroy((envid_t)a1);
+    case SYS_getenvid:
+        return sys_getenvid();
+    }
+
 
     return -E_NO_SYS;
 }
