@@ -173,6 +173,8 @@ i386_init(void) {
     ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
     /* Don't auto-start user programs here, we need to land in the monitor. */
+    /* Touch all you want. */
+    ENV_CREATE(user_forktree, ENV_TYPE_USER);
 #endif /* TEST* */
 #endif
     
