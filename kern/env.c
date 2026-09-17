@@ -213,6 +213,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     return 0;
 }
 
+#ifdef CONFIG_KSPACE
 /* Pass the original ELF image to binary/size and bind all the symbols within
  * its loaded address space specified by image_start/image_end.
  * Make sure you understand why you need to check that each binding
@@ -269,6 +270,30 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 
 
     return 0;
+}
+#endif
+
+/*[dkay]:
+ * an utility func to confert ELF sections' permissions
+ * into jos page permissions
+ */
+static int
+convert_elf_permissions(int p_flag) {
+    int perm = 0;
+
+#define convert_permission(elf_perm, page_perm) \
+    do {                                        \
+        if (p_flag & elf_perm)                  \
+            perm |= page_perm;                  \
+    } while (0)
+
+    convert_permission(ELF_PROG_FLAG_READ, PROT_R);
+    convert_permission(ELF_PROG_FLAG_WRITE, PROT_W);
+    convert_permission(ELF_PROG_FLAG_EXEC, PROT_X);
+
+#undef convert_permission
+
+    return perm;
 }
 
 /* Set up the initial program binary, stack, and processor flags
@@ -327,7 +352,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     struct Proghdr *prog_heades = (struct Proghdr *)(binary + header.e_phoff);
 
     // since p.va is now at user space, we have to switch space before copying loadable segments
-    struct AddressSpace *cur_aspace = switch_address_space(&env->address_space);
+    struct AddressSpace *prev_addrspace = switch_address_space(&env->address_space);
 
     // reading prog_headers array
     for (int p_idx = 0; p_idx < header.e_phnum; ++p_idx) {
@@ -343,21 +368,39 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         // also, no more need in zeroing memory since we use ALLOC_ZERO
         uint64_t aligned_va = ROUNDDOWN(cur_ph.p_va, PAGE_SIZE);
         uint64_t aligned_va_size = (cur_ph.p_va - aligned_va) + cur_ph.p_memsz;
+        aligned_va_size = ROUNDUP(aligned_va_size, PAGE_SIZE);
 
+        int permissions = convert_elf_permissions(cur_ph.p_flags);
+
+        // [dkay]: we always add WRITE to permissions since we have to copy code
+        // after that, we will remove it
         int retcode =
-                map_region(current_space, aligned_va, NULL, 0, ROUNDUP(aligned_va_size, PAGE_SIZE),
-                           ALLOC_ZERO | PROT_USER_ | PROT_R | PROT_W | PROT_X);
+                map_region(current_space, aligned_va, NULL, 0, aligned_va_size,
+                           ALLOC_ZERO | PROT_USER_ | PROT_W | permissions);
 
         if (retcode != 0) {
-            switch_address_space(cur_aspace);
+            switch_address_space(prev_addrspace);
             return -E_INVALID_EXE;
         }
 
         // copying code
         memcpy((uint8_t *)cur_ph.p_va, binary + cur_ph.p_offset, cur_ph.p_filesz);
 
-        start_addr = cur_ph.p_va < start_addr ? cur_ph.p_va : start_addr;
+        // Remowing PROT_W after copyying if needed
+        if ((permissions & PROT_W) == 0) {
+            int retcode =
+                    map_region(current_space, aligned_va,
+                               current_space, aligned_va,
+                               aligned_va_size,
+                               PROT_USER_ | permissions);
 
+            if (retcode != 0) {
+                switch_address_space(prev_addrspace);
+                return -E_INVALID_EXE;
+            }
+        }
+
+        start_addr = cur_ph.p_va < start_addr ? cur_ph.p_va : start_addr;
         uint64_t potential_end_addr = cur_ph.p_va + cur_ph.p_memsz;
         end_addr = potential_end_addr > end_addr ? potential_end_addr : end_addr;
     }
@@ -377,7 +420,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // bind_functions(env, binary, size, start_addr, end_addr);
 
     // switch back
-    switch_address_space(cur_aspace);
+    switch_address_space(prev_addrspace);
 
     return 0;
 }

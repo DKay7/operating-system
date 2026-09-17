@@ -26,7 +26,8 @@ sys_cputs(const char* s, size_t len) {
     /* Check that the user has permission to read memory [s, s+len).
      * Destroy the environment if not. */
     user_mem_assert(curenv, s, len, PROT_R);
-
+    
+    // FIXME: copy from user via nosan_memcpy
     for (int i = 0; i < len; ++i)
         cputchar(s[i]);
 
