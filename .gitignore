@@ -37,3 +37,4 @@ compile_commands.json
 /LoaderPkg/ESP
 /LoaderPkg/efibuild.sh
 /LoaderPkg/mtoc-mac64.sha256
+compile_commands.json
