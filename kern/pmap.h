@@ -35,7 +35,7 @@ void __nosan_memmove(void *, void *, size_t);
 
 #define MAX_CLASS 48
 
-#define POOL_ENTRIES_FOR_SIZE(sz) (((sz)-offsetof(struct PagePool, data)) / sizeof(struct Page))
+#define POOL_ENTRIES_FOR_SIZE(sz) (((sz) - offsetof(struct PagePool, data)) / sizeof(struct Page))
 
 #define KB 1024LL
 #define MB (KB * 1024)
@@ -113,6 +113,7 @@ void release_address_space(struct AddressSpace *space);
 struct AddressSpace *switch_address_space(struct AddressSpace *space);
 int init_address_space(struct AddressSpace *space);
 void user_mem_assert(struct Env *env, const void *va, size_t len, int perm);
+int user_mem_check(struct Env *env, const void *va, size_t len, int perm);
 int region_maxref(struct AddressSpace *spc, uintptr_t addr, size_t size);
 int force_alloc_page(struct AddressSpace *spc, uintptr_t va, int maxclass);
 void dump_page_table(pte_t *pml4);
@@ -160,7 +161,7 @@ _kaddr(const char *file, int line, physaddr_t pa) {
  * This is used for mapping required regions in kernel PML table so that
  * required addresses are accessible in 32-bit uefi. */
 #define X86MASK      0xFFFFFFFF
-#define X86ADDR(kva) ((kva)&X86MASK)
+#define X86ADDR(kva) ((kva) & X86MASK)
 
 /* Number of PML4 entries taken by userspace */
 #define NUSERPML4 1

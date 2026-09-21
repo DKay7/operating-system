@@ -1,5 +1,6 @@
 /* implement fork from user space */
 
+#include "inc/env.h"
 #include <inc/string.h>
 #include <inc/lib.h>
 
@@ -20,10 +21,24 @@ envid_t
 fork(void) {
     // LAB 9: Your code here.
 
-    panic("fork() is not implemented");
+    envid_t child_id = sys_exofork();
 
-    return 0;
+    if (child_id == 0) {
+        // child
+        thisenv = &envs[ENVX(sys_getenvid())];
+    } else {
+        // parent
+        // todo: check ret
+        sys_map_region(0, NULL, child_id, NULL, MAX_USER_ADDRESS, PROT_ALL | PROT_LAZY | PROT_COMBINE);
+        sys_env_set_pgfault_upcall(child_id, thisenv->env_pgfault_upcall);
+
+        sys_env_set_status(child_id, ENV_RUNNABLE);
+    }
+
+    return child_id;
 }
+
+// FIXME: What is duppage(), pagefault() in lab's text?
 
 envid_t
 sfork() {

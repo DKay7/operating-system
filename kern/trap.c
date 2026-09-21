@@ -1,4 +1,5 @@
 #include "inc/trap.h"
+#include "inc/memlayout.h"
 #include "inc/stdio.h"
 #include <inc/mmu.h>
 #include <inc/x86.h>
@@ -281,7 +282,9 @@ trap_dispatch(struct Trapframe *tf) {
     case T_PGFLT:
         /* Handle processor exceptions. */
         // LAB 9: Your code here.
+        page_fault_handler(tf);
         return;
+
     case T_BRKPT:
         monitor(tf);
         return;
@@ -450,29 +453,66 @@ page_fault_handler(struct Trapframe *tf) {
     static_assert(UTRAP_RIP == offsetof(struct UTrapframe, utf_rip), "UTRAP_RIP should be equal to RIP offset");
     static_assert(UTRAP_RSP == offsetof(struct UTrapframe, utf_rsp), "UTRAP_RSP should be equal to RSP offset");
 
+
+    // [dkay]: some of test check fails because of this.....
+    // if (curenv->env_pgfault_upcall == NULL) {
+    //     // [dkay]: no handler, terminate process
+    //     env_destroy(curenv);
+    // }
+
+    uintptr_t exception_stack_top = USER_EXCEPTION_STACK_TOP;
+
+    if (tf->tf_rsp >= USER_EXCEPTION_STACK_TOP - USER_EXCEPTION_STACK_SIZE && tf->tf_rsp < USER_EXCEPTION_STACK_TOP) {
+        // [dkay]: we are in users' pagefault handler...
+        //         so gotta allocate new stack right behind current one
+
+        exception_stack_top = tf->tf_rsp;
+        exception_stack_top -= 8; // margin
+
+        // check for overflow
+    }
     /* Force allocation of exception stack page to prevent memcpy from
      * causing pagefault during another pagefault */
     // LAB 9: Your code here:
-
-    /* Force allocate exception stack page to prevent memcpy from
-     * causing pagefault during another pagefault */
-    // LAB 9: Your code here:
+    // [dkay]: ignoring ret in case of pagefault,
+    //         checking that all is ok with user_mem_assert
+    force_alloc_page(&curenv->address_space,
+                     exception_stack_top - sizeof(struct UTrapframe),
+                     MAX_CLASS);
 
     /* Assert existance of exception stack */
     // LAB 9: Your code here:
+    user_mem_assert(curenv, (void *)(exception_stack_top - sizeof(struct UTrapframe)),
+                    sizeof(struct UTrapframe), PROT_R | PROT_W);
+
 
     /* Build local copy of UTrapframe */
     // LAB 9: Your code here:
+    // clang-format off
+    struct UTrapframe user_tf = {
+            .utf_err = tf->tf_err,
+            .utf_rsp = tf->tf_rsp,
+            .utf_fault_va = rcr2(),
+            .utf_regs = tf->tf_regs,
+            .utf_rip =  tf->tf_rip,
+            .utf_rflags = tf->tf_rflags,
+    };
+    // clang-format on
 
     /* And then copy it userspace (nosan_memcpy()) */
     // LAB 9: Your code here:
+    exception_stack_top -= sizeof(user_tf);
+    nosan_memcpy((void *)(exception_stack_top), &user_tf, sizeof(user_tf));
+
 
     /* Reset in_page_fault flag */
     // LAB 9: Your code here:
-
+    in_page_fault = false;
     /* Rerun current environment */
     // LAB 9: Your code here:
+    curenv->env_tf.tf_rsp = exception_stack_top;
+    curenv->env_tf.tf_rip = (intptr_t)curenv->env_pgfault_upcall;
+    env_run(curenv);
 
-    while (1)
-        ;
+    while (1);
 }

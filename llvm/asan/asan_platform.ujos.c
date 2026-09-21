@@ -18,6 +18,8 @@
 #include "asan_memintrinsics.h"
 #include "inc/memlayout.h"
 #include "inc/lib.h"
+#include "inc/types.h"
+#include <stdint.h>
 
 #if !defined(SANITIZE_USER_SHADOW_BASE) || !defined(SANITIZE_USER_SHADOW_SIZE) || !defined(SANITIZE_USER_SHADOW_OFF)
 #error "You are to define SANITIZE_USER_SHADOW_BASE and SANITIZE_USER_SHADOW_SIZE for shadow memory support!"
@@ -68,8 +70,19 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
-    (void)utf;
-    return 1;
+
+    // check if addres not in shadow memory
+    // but not in shadow memory describing itself
+    if (!SHADOW_ADDRESS_VALID(utf->utf_fault_va) &&
+        ((uint8_t *)utf->utf_fault_va >= SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_start) &&
+         (uint8_t *)utf->utf_fault_va < SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_end)))
+        return 0;
+
+    int ret = sys_alloc_region(sys_getenvid(), (void *)ROUNDDOWN(utf->utf_fault_va, PAGE_SIZE), PAGE_SIZE, ALLOC_ONE | PROT_W | PROT_R);
+
+    // return 1 to indicate that we handlet exception correctly
+    // 0 otherwise
+    return ret == 0;
 }
 #endif
 

@@ -30,20 +30,21 @@ sched_yield(void) {
     // LAB 3: Your code here:
     bool found = false;
     int sched_idx = curenv ? ENVX(curenv->env_id) : 0;
+    int next_idx = sched_idx;
 
     for (int idx = 0; idx < NENV; ++idx) {
-        if (envs[idx].env_status == ENV_RUNNABLE) {
+        next_idx = (sched_idx + idx + 1) % NENV;
+
+        if (envs[next_idx].env_status == ENV_RUNNABLE) {
             found = true;
-            sched_idx = idx;
             break;
         }
     }
-    
+
     if (found)
-        env_run(&envs[sched_idx]);
+        env_run(&envs[next_idx]);
     else if (curenv && curenv->env_status == ENV_RUNNING)
         env_run(curenv);
-
 
 
     cprintf("Halt\n");

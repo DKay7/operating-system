@@ -496,8 +496,10 @@ env_destroy(struct Env *env) {
     // LAB 8: Your code here
 
     env->env_status = ENV_DYING;
+    env_free(env);
+
+    // if it was curenv, gonna re-sched
     if (env == curenv) {
-        env_free(env);
         in_page_fault = false;
         sched_yield();
     }

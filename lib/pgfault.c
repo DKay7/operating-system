@@ -4,6 +4,7 @@
  * wrapper in pfentry.S, which in turns calls the registered C
  * function. */
 
+#include "inc/memlayout.h"
 #include <inc/lib.h>
 
 /* Assembly language pgfault entrypoint defined in lib/pfentry.S. */
@@ -42,7 +43,13 @@ add_pgfault_handler(pf_handler_t handler) {
     if (!_pfhandler_inititiallized) {
         /* First time through! */
         // LAB 9: Your code here:
-        goto end;
+        envid_t envid = sys_getenvid();
+        sys_alloc_region(envid,
+                         (void *)(USER_EXCEPTION_STACK_TOP - USER_EXCEPTION_STACK_SIZE),
+                         USER_EXCEPTION_STACK_SIZE, PROT_W | PROT_R);
+
+        sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
+
         _pfhandler_inititiallized = 1;
     }
 
@@ -54,7 +61,6 @@ add_pgfault_handler(pf_handler_t handler) {
     else
         _pfhandler_vec[_pfhandler_off++] = handler;
 
-end:
     if (res < 0) panic("set_pgfault_handler: %i", res);
     return res;
 }

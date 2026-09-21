@@ -1,6 +1,15 @@
 /* User-level IPC library routines */
 
+#include "inc/assert.h"
+#include "inc/error.h"
+#include "inc/memlayout.h"
 #include <inc/lib.h>
+
+#define store_nonnull(storage, value) \
+    do {                              \
+        if (storage)                  \
+            *storage = value;         \
+    } while (0)
 
 /* Receive a value via IPC and return it.
  * If 'pg' is nonnull, then any page sent by the sender will be mapped at
@@ -23,7 +32,32 @@ int32_t
 ipc_recv(envid_t *from_env_store, void *pg, size_t *size, int *perm_store) {
     // LAB 9: Your code here:
 
-    return -1;
+    size_t actual_size = 0;
+
+    // [dkay]: tell that we are not expecting for a page
+    if (pg == NULL) {
+        pg = (void *)(MAX_USER_ADDRESS + 1);
+    // user is a dumbass by passing a size=0
+    // so punish them with undocumented behavior
+    } else if (size != NULL) {
+        actual_size = *size;
+    }
+
+    int ret = sys_ipc_recv(pg, actual_size);
+
+    if (ret != 0) {
+        store_nonnull(from_env_store, 0);
+        store_nonnull(perm_store, 0);
+        store_nonnull(size, 0);
+
+        return ret;
+    }
+
+    store_nonnull(from_env_store, thisenv->env_ipc_from);
+    store_nonnull(perm_store, thisenv->env_ipc_perm);
+    store_nonnull(size, thisenv->env_ipc_maxsz);
+
+    return thisenv->env_ipc_value;
 }
 
 /* Send 'val' (and 'pg' with 'perm', if 'pg' is nonnull) to 'toenv'.
@@ -37,6 +71,29 @@ ipc_recv(envid_t *from_env_store, void *pg, size_t *size, int *perm_store) {
 void
 ipc_send(envid_t to_env, uint32_t val, void *pg, size_t size, int perm) {
     // LAB 9: Your code here:
+
+    // user is a dumbass if they allow this
+    // so we skip the check and silent return on failure
+    // and allow  panic in such case
+    // if (pg != NULL && size == 0)
+    //     return;
+
+    if (pg == NULL)
+        pg = (void *)(MAX_USER_ADDRESS + 1);
+
+    int ret = 0;
+
+    do {
+        // [dkay]: if previous send ended up with not recv,
+        //         yielding instead of heating up cpu
+        if (ret == -E_IPC_NOT_RECV)
+            sys_yield();
+
+        ret = sys_ipc_try_send(to_env, val, pg, size, perm);
+    } while (ret == -E_IPC_NOT_RECV);
+
+    if (ret != 0)
+        panic("Error while calling to sys_ipc_try_send: %i", ret);
 }
 
 /* Find the first environment of the given type.  We'll use this to
