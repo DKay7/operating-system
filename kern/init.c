@@ -166,6 +166,7 @@ i386_init(void) {
 
 #if LAB >= 10
     /* Same idea here: keep the monitor available for timer commands. */
+    ENV_CREATE(fs_fs, ENV_TYPE_FS);
 #endif
 
 #if defined(TEST)

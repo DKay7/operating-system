@@ -113,8 +113,17 @@ devfile_read(struct Fd *fd, void *buf, size_t n) {
      * system server. */
 
     // LAB 10: Your code here:
-    size_t res0 = 0;
-    (void)fd, (void)buf, (void)n;
+    ssize_t res0 = 0;
+
+    fsipcbuf.read.req_n = n;
+    fsipcbuf.read.req_fileid = fd->fd_file.id;
+
+    res0 = fsipc(FSREQ_READ, NULL);
+
+    if (res0 < 0)
+        return res0;
+
+    memmove(buf, fsipcbuf.readRet.ret_buf, res0);
 
     return res0;
 }
@@ -133,8 +142,14 @@ devfile_write(struct Fd *fd, const void *buf, size_t n) {
      * potentially required. */
 
     // LAB 10: Your code here:
-    size_t res0 = 0;
-    (void)fd, (void)buf, (void)n;
+    ssize_t res0 = 0;
+
+    fsipcbuf.write.req_n = n;
+    fsipcbuf.write.req_fileid = fd->fd_file.id;
+
+    size_t size = MIN(n, sizeof(fsipcbuf.write.req_buf));
+    memmove(fsipcbuf.write.req_buf, buf, size);
+    res0 = fsipc(FSREQ_WRITE, NULL);
 
     return res0;
 }

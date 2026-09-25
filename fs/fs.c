@@ -2,6 +2,8 @@
 #include <inc/partition.h>
 
 #include "fs.h"
+#include "inc/error.h"
+#include "inc/fs.h"
 
 /* Superblock */
 struct Super *super;
@@ -60,8 +62,22 @@ alloc_block(void) {
      * super->s_nblocks blocks in the disk altogether. */
 
     // LAB 10: Your code here
+    uint32_t free_idx = 0;
+    for (uint32_t idx = 0; idx < super->s_nblocks; ++idx) {
 
-    return 0;
+        if (block_is_free(idx)) {
+            free_idx = idx;
+            break;
+        }
+    }
+
+    if (free_idx == 0)
+        return 0;
+
+    CLRBIT(bitmap, free_idx);
+    flush_block(&bitmap[free_idx / 32]);
+
+    return free_idx;
 }
 
 /* Validate the file system bitmap.
@@ -120,14 +136,41 @@ fs_init(void) {
  *
  * Analogy: This is like pgdir_walk for files.
  * Hint: Don't forget to clear any block you allocate. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
 int
 file_block_walk(struct File *f, blockno_t filebno, blockno_t **ppdiskbno, bool alloc) {
     // LAB 10: Your code here
 
+    if (filebno >= NDIRECT + NINDIRECT)
+        return -E_INVAL;
+
     *ppdiskbno = NULL;
+
+    if (filebno < NDIRECT) {
+        *ppdiskbno = &(f->f_direct[filebno]);
+        return 0;
+    }
+
+    // inderect block not present
+    if (f->f_indirect == 0) {
+        if (!alloc)
+            return -E_NOT_FOUND;
+
+        blockno_t new_bno = alloc_block();
+        if (new_bno == 0)
+            return -E_NO_DISK;
+
+        f->f_indirect = new_bno;
+        memset(diskaddr(f->f_indirect), 0, BLKSIZE);
+    }
+
+    blockno_t *bloks = diskaddr(f->f_indirect);
+    *ppdiskbno = &bloks[filebno - NDIRECT];
 
     return 0;
 }
+#pragma GCC diagnostic pop
 
 /* Set *blk to the address in memory where the filebno'th
  * block of file 'f' would be mapped.
@@ -140,8 +183,23 @@ file_block_walk(struct File *f, blockno_t filebno, blockno_t **ppdiskbno, bool a
 int
 file_get_block(struct File *f, blockno_t filebno, char **blk) {
     // LAB 10: Your code here
-
     *blk = NULL;
+    int ret = 0;
+    blockno_t *disk_block = NULL;
+    ret = file_block_walk(f, filebno, &disk_block, true);
+
+    if (ret != 0)
+        return ret;
+
+    if (*disk_block == 0) {
+        blockno_t new_block = alloc_block();
+        if (new_block == 0)
+            return -E_NO_DISK;
+
+        *disk_block = new_block;
+    }
+
+    *blk = diskaddr(*disk_block);
 
     return 0;
 }

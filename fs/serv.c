@@ -6,6 +6,8 @@
 #include <inc/x86.h>
 #include <inc/string.h>
 
+#include "inc/fs.h"
+#include "inc/lib.h"
 #include "pci.h"
 #include "fs.h"
 #include "nvme.h"
@@ -198,8 +200,20 @@ serve_read(envid_t envid, union Fsipc *ipc) {
     }
 
     // LAB 10: Your code here
+    struct OpenFile *opened_file = NULL;
+    int ret = -1;
 
-    return -1;
+    if ((ret = openfile_lookup(envid, req->req_fileid, &opened_file)) < 0)
+        return ret;
+
+    size_t max_size = MIN(req->req_n, sizeof(ipc->readRet.ret_buf));
+    ret = file_read(opened_file->o_file, ipc->readRet.ret_buf, max_size, opened_file->o_fd->fd_offset);
+    if (ret < 0)
+        return ret;
+
+    opened_file->o_fd->fd_offset += ret;
+
+    return ret;
 }
 
 /* Write req->req_n bytes from req->req_buf to req_fileid, starting at
@@ -213,8 +227,20 @@ serve_write(envid_t envid, union Fsipc *ipc) {
         cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, (uint32_t)req->req_n);
 
     // LAB 10: Your code here
+    struct OpenFile *opened_file = NULL;
+    int ret = -1;
 
-    return -1;
+    if ((ret = openfile_lookup(envid, req->req_fileid, &opened_file)) < 0)
+        return ret;
+
+    size_t max_size = MIN(req->req_n, sizeof(ipc->write.req_buf));
+    ret = file_write(opened_file->o_file, ipc->write.req_buf, max_size, opened_file->o_fd->fd_offset);
+    if (ret < 0)
+        return ret;
+
+    opened_file->o_fd->fd_offset += ret;
+
+    return ret;
 }
 
 /* Stat ipc->stat.req_fileid.  Return the file's struct Stat to the

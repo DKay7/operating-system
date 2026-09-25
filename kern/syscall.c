@@ -1,6 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
 #include "inc/syscall.h"
+#include "inc/mmu.h"
 #include "inc/stdio.h"
 #include <inc/x86.h>
 #include <inc/error.h>
@@ -295,7 +296,22 @@ static int
 sys_map_physical_region(uintptr_t pa, envid_t envid, uintptr_t va, size_t size, int perm) {
     // LAB 10: Your code here
 
-    return 0;
+    if (curenv->env_type != ENV_TYPE_FS)
+        return -E_BAD_ENV;
+
+    if ((va + size > MAX_USER_ADDRESS) || (va % PAGE_SIZE != 0) || (pa % PAGE_SIZE) ||
+        (size % PAGE_SIZE != 0) || (perm & (PROT_SHARE | PROT_COMBINE | PROT_LAZY)) != 0)
+        return -E_INVAL;
+
+    struct Env* env = NULL;
+    int ret = 0;
+    ret = envid2env(envid, &env, true);
+    if (ret != 0)
+        return -E_BAD_ENV;
+
+    ret = map_physical_region(&env->address_space, va, pa, size, PROT_USER_ | MAP_USER_MMIO | perm);
+
+    return ret;
 }
 
 /* Try to send 'value' to the target env 'envid'.
@@ -358,7 +374,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, size_t size, in
     if (dst_env->env_ipc_dstva < MAX_USER_ADDRESS && srcva < MAX_USER_ADDRESS) {
 
         // [dkay]: checking there are only RWX permission
-        if ((perm & (~PROT_RWX)) != 0)
+        if ((perm & ~(PROT_RWX | PROT_SHARE)) != 0)
             return -E_INVAL;
 
         if (size == 0 || size % PAGE_SIZE != 0)
@@ -368,7 +384,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, size_t size, in
         int ret = 0;
         size_t min_size = MIN(dst_env->env_ipc_maxsz, size);
 
-        ret = user_mem_check(curenv, (void*)srcva, min_size, PROT_USER_ | perm);
+        ret = user_mem_check(curenv, (void*)srcva, min_size, PROT_USER_ | (perm & PROT_RWX));
         if (ret != 0)
             return -E_INVAL;
 
@@ -437,7 +453,17 @@ static int
 sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, uintptr_t size2) {
     // LAB 10: Your code here
 
-    return 0;
+    if (addr + size > MAX_USER_ADDRESS)
+        return 0;
+
+    int ref = region_maxref(&curenv->address_space, addr, size);
+
+    if (addr2 + size2 > MAX_USER_ADDRESS)
+        return ref;
+
+    int ref2 = region_maxref(&curenv->address_space, addr2, size2);
+
+    return ref - ref2;
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -449,6 +475,7 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
     if (syscallno >= NSYSCALLS)
         return -E_NO_SYS;
 
+    // LAB 10: Your code here
     // LAB 9: Your code here
     // LAB 8: Your code here
     switch (syscallno) {
@@ -481,8 +508,11 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_ipc_recv(a1, a2);
     case SYS_ipc_try_send:
         return sys_ipc_try_send((envid_t)a1, (uint64_t)a2, a3, (size_t)a4, (int)a5);
+    case SYS_region_refs:
+        return sys_region_refs(a1, (size_t)a2, a3, a4);
+    case SYS_map_physical_region:
+        return sys_map_physical_region(a1, (envid_t)a2, a3, (size_t)a4, (int)a5);
     }
-    // LAB 10: Your code here
 
     return -E_NO_SYS;
 }

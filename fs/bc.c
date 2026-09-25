@@ -1,5 +1,8 @@
 
 #include "fs.h"
+#include "inc/lib.h"
+#include "inc/mmu.h"
+#include "inc/types.h"
 #include "nvme.h"
 
 /* Return the virtual address of this disk block. */
@@ -22,7 +25,8 @@ bc_pgfault(struct UTrapframe *utf) {
     blockno_t blockno = ((uintptr_t)addr - (uintptr_t)DISKMAP) / BLKSIZE;
 
     /* Check that the fault was within the block cache region */
-    if (addr < (void *)DISKMAP || addr >= (void *)(DISKMAP + DISKSIZE)) return 0;
+    if (addr < (void *)DISKMAP || addr >= (void *)(DISKMAP + DISKSIZE))
+        return 0;
 
     /* Sanity check the block number. */
     if (super && blockno >= super->s_nblocks)
@@ -33,6 +37,19 @@ bc_pgfault(struct UTrapframe *utf) {
      * Hint: first round addr to page boundary. fs/nvme.c has code to read
      * the disk. */
     // LAB 10: Your code here
+
+    int ret = 0;
+    addr = ROUNDDOWN(addr, PAGE_SIZE);
+    // [dkay]: PROT_SHARE to enforce page allocation
+    ret = sys_alloc_region(0, addr, BLKSIZE, ALLOC_ZERO | PROT_RW | PROT_SHARE);
+
+    if (ret != 0)
+        return 0;
+
+    uint64_t secno = ((uintptr_t)addr - (uintptr_t)DISKMAP) / SECTSIZE;
+    ret = nvme_read(secno, addr, BLKSIZE / SECTSIZE);
+    if (ret != 0)
+        return 0;
 
     return 1;
 }
@@ -47,7 +64,6 @@ bc_pgfault(struct UTrapframe *utf) {
 void
 flush_block(void *addr) {
     blockno_t blockno = ((uintptr_t)addr - (uintptr_t)DISKMAP) / BLKSIZE;
-    int res;
 
     if (addr < (void *)(uintptr_t)DISKMAP || addr >= (void *)(uintptr_t)(DISKMAP + DISKSIZE))
         panic("flush_block of bad va %p", addr);
@@ -55,10 +71,21 @@ flush_block(void *addr) {
         panic("reading non-existent block %08x out of %08x\n", blockno, super->s_nblocks);
 
     // LAB 10: Your code here.
-    (void)res;
+    if (!is_page_present(addr) || !is_page_dirty(addr))
+        return;
 
+    int res = 0;
+    addr = ROUNDDOWN(addr, PAGE_SIZE);
+    uint64_t secno = ((uintptr_t)addr - (uintptr_t)DISKMAP) / SECTSIZE;
+    res = nvme_write(secno, addr, BLKSIZE / SECTSIZE);
 
-    assert(!is_page_dirty(addr));
+    if (res != 0)
+        panic("flush_block writing failed with error: %i", res);
+
+    res = sys_map_region(0, addr, 0, addr, BLKSIZE, PROT_RW);
+
+    if (res != 0)
+        panic("flush_block re-mapping failed with error: %i", res);
 }
 
 /* Test that the block cache works, by smashing the superblock and

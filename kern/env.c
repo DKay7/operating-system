@@ -462,7 +462,10 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
 
     new_env->env_parent_id = 0;
     new_env->env_type = type;
+
     // LAB 10: Your code here
+    if (new_env->env_type == ENV_TYPE_FS)
+        new_env->env_tf.tf_rflags |= FL_IOPL_3;
 }
 
 
