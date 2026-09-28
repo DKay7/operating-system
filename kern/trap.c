@@ -5,6 +5,7 @@
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>
+#include <inc/vsyscall.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -16,6 +17,7 @@
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/timer.h>
+#include <kern/vsyscall.h>
 #include <kern/traceopt.h>
 #include <stdint.h>
 
@@ -315,11 +317,12 @@ trap_dispatch(struct Trapframe *tf) {
             panic("No timer interrupt handler configured");
         timer_for_schedule->handle_interrupts();
         sched_yield();
+        // LAB 12: Your code here
         return;
-        // LAB 11: Your code here
-        /* Handle keyboard (IRQ_KBD + kbd_intr()) and
-         * serial (IRQ_SERIAL + serial_intr()) interrupts. */
 
+    // LAB 11: Your code here
+    /* Handle keyboard (IRQ_KBD + kbd_intr()) and
+     * serial (IRQ_SERIAL + serial_intr()) interrupts. */
     case IRQ_OFFSET + IRQ_KBD:
         kbd_intr();
         pic_send_eoi(IRQ_KBD);
