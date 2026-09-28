@@ -1,7 +1,11 @@
 /* User virtual page table helpers */
 
+#include "inc/error.h"
+#include "inc/memlayout.h"
+#include "inc/types.h"
 #include <inc/lib.h>
 #include <inc/mmu.h>
+#include <stdint.h>
 
 extern volatile pte_t uvpt[];     /* VA of "virtual page table" */
 extern volatile pde_t uvpd[];     /* VA of current page directory */
@@ -62,7 +66,69 @@ foreach_shared_region(int (*fun)(void *start, void *end, void *arg), void *arg) 
     // LAB 11: Your code here:
 
     int res = 0;
-    (void)fun, (void)arg;
+    if (fun == NULL)
+        return -E_INVAL;
+
+    uintptr_t va = 0;
+
+    while (va < MAX_USER_ADDRESS) {
+
+        if (res != 0)
+            return res;
+
+        // PML4 entry is not present
+        // move va to next pml4
+        if (!(uvpml4[VPML4(va)] & PTE_P)) {
+            va = ROUNDDOWN(va, 1lu << PML4_SHIFT);
+            va = va + (1lu << PML4_SHIFT);
+            continue;
+        }
+
+        // pdp entry not present
+        // move va to next pdp
+        if (!(uvpdp[VPDP(va)] & PTE_P)) {
+            va = ROUNDDOWN(va, 1 << PDP_SHIFT);
+            va = va + (1 << PDP_SHIFT);
+            continue;
+        }
+
+        // pdp entry is present, but has HUGE_PAGE
+        if (uvpdp[VPDP(va)] & PTE_PS) {
+            // and it has PTE_SHARE, so its our target
+            if (uvpdp[VPDP(va)] & PTE_SHARE)
+                res = fun((void *)va, (void *)(va + (1 << PDP_SHIFT)), arg);
+
+            va = ROUNDDOWN(va, 1 << PDP_SHIFT);
+            va = va + (1 << PDP_SHIFT);
+            continue;
+        }
+
+        // pd entry not present
+        // move va to next pd
+        if (!(uvpd[VPD(va)] & PTE_P)) {
+            va = ROUNDDOWN(va, 1 << PD_SHIFT);
+            va = va + (1 << PD_SHIFT);
+            continue;
+        }
+
+        // pd entry is present, but has HUGE_PAGE
+        if ((uvpd[VPD(va)] & PTE_PS)) {
+            // and it has PTE_SHARE, so its our target
+            if (uvpd[VPD(va)] & PTE_SHARE)
+                res = fun((void *)va, (void *)(va + (1 << PD_SHIFT)), arg);
+
+            va = ROUNDDOWN(va, 1 << PD_SHIFT);
+            va = va + (1 << PD_SHIFT);
+            continue;
+        }
+
+        // pt entry is present
+        if ((uvpt[VPT(va)] & PTE_P) && (uvpt[VPT(va)] & PTE_SHARE)) {
+            res = fun((void *)va, (void *)(va + PAGE_SIZE), arg);
+        }
+
+        va += PAGE_SIZE;
+    }
 
     return res;
 }

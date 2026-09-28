@@ -118,6 +118,9 @@ TRAPHANDLER_NOEC(t_mchk  ,  T_MCHK)     /* machine check */
 TRAPHANDLER_NOEC(t_simderr, T_SIMDERR)  /* SIMD floating point error */
 TRAPHANDLER_NOEC(t_syscall, T_SYSCALL)
 
-TRAPHANDLER_NOEC(clock_thdlr, IRQ_OFFSET + IRQ_CLOCK)
-TRAPHANDLER_NOEC(timer_thdlr, IRQ_OFFSET + IRQ_TIMER)
+TRAPHANDLER_NOEC(clock_thdlr,   IRQ_OFFSET + IRQ_CLOCK)
+TRAPHANDLER_NOEC(timer_thdlr,   IRQ_OFFSET + IRQ_TIMER)
+TRAPHANDLER_NOEC(kbd_thdlr,     IRQ_OFFSET + IRQ_KBD)
+TRAPHANDLER_NOEC(serial_thdlr,  IRQ_OFFSET + IRQ_SERIAL)
+
 #endif

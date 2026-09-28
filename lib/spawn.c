@@ -1,3 +1,4 @@
+#include "inc/memlayout.h"
 #include <inc/lib.h>
 #include <inc/elf.h>
 
@@ -281,11 +282,34 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
      * for each program segment (HUGE_PAGE_SIZE) */
 
     /* Allocate filesz - memsz in child */
+    res = sys_alloc_region(child, (void *)va, memsz, perm);
+    if (res < 0)
+        return -E_NO_MEM;
+
     /* Allocate filesz in parent to UTEMP */
+    res = sys_alloc_region(0, UTEMP, filesz, PROT_RW | perm);
+    if (res < 0)
+        return -E_NO_MEM;
+
     /* seek() fd to fileoffset  */
+    res = seek(fd, fileoffset);
+    if (res < 0)
+        return res;
+
     /* read filesz to UTEMP */
+    res = readn(fd, UTEMP, filesz);
+    if (res != filesz)
+        return res;
+
     /* Map read section conents to child */
+    res = sys_map_region(0, UTEMP, child, (void *)va, filesz, perm);
+    if (res != 0)
+        return res;
+
     /* Unmap it from parent */
+    res = sys_unmap_region(0, UTEMP, filesz);
+    if (res != 0)
+        return res;
 
     return 0;
 }

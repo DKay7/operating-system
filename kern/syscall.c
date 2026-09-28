@@ -1,6 +1,7 @@
 /* See COPYRIGHT for copyright information. */
 
 #include "inc/syscall.h"
+#include "inc/memlayout.h"
 #include "inc/mmu.h"
 #include "inc/stdio.h"
 #include <inc/x86.h>
@@ -463,6 +464,24 @@ static int
 sys_env_set_trapframe(envid_t envid, struct Trapframe* tf) {
     // LAB 11: Your code here
 
+    struct Env* dst_env = NULL;
+    int retcode = envid2env(envid, &dst_env, true);
+    if (retcode != 0)
+        return -E_BAD_ENV;
+
+    retcode = user_mem_check(curenv, tf, sizeof(*tf), PROT_R | PROT_USER_);
+    if (retcode != 0)
+        return -E_INVAL;
+
+    nosan_memcpy(&dst_env->env_tf, tf, sizeof(*tf));
+
+    dst_env->env_tf.tf_ds = GD_UD | 3;
+    dst_env->env_tf.tf_es = GD_UD | 3;
+    dst_env->env_tf.tf_ss = GD_UD | 3;
+    dst_env->env_tf.tf_cs = GD_UT | 3;
+    dst_env->env_tf.tf_rflags &= (FL_CF | FL_ZF | FL_AF | FL_SF | FL_OF);
+    dst_env->env_tf.tf_rflags |= FL_IF;
+
     return 0;
 }
 
@@ -538,6 +557,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_region_refs(a1, (size_t)a2, a3, a4);
     case SYS_map_physical_region:
         return sys_map_physical_region(a1, (envid_t)a2, a3, (size_t)a4, (int)a5);
+    case SYS_env_set_trapframe:
+        return sys_env_set_trapframe((envid_t)a1, (struct Trapframe*)a2);
     }
 
     return -E_NO_SYS;

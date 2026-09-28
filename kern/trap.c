@@ -124,6 +124,8 @@ void t_syscall();
 
 void clock_thdlr();
 void timer_thdlr();
+void kbd_thdlr();
+void serial_thdlr();
 
 void
 trap_init(void) {
@@ -165,6 +167,8 @@ trap_init(void) {
     idt[T_PGFLT].gd_ist = 1;
 
     // LAB 11: Your code here
+    idt[IRQ_KBD + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&kbd_thdlr), 0);
+    idt[IRQ_SERIAL + IRQ_OFFSET] = GATE(0, GD_KT, (uintptr_t)(&serial_thdlr), 0);
 
     /* Per-CPU setup */
     trap_init_percpu();
@@ -300,6 +304,7 @@ trap_dispatch(struct Trapframe *tf) {
             print_trapframe(tf);
         }
         return;
+
     case IRQ_OFFSET + IRQ_CLOCK:
     case IRQ_OFFSET + IRQ_TIMER:
         // LAB 4: Your code here
@@ -314,6 +319,17 @@ trap_dispatch(struct Trapframe *tf) {
         // LAB 11: Your code here
         /* Handle keyboard (IRQ_KBD + kbd_intr()) and
          * serial (IRQ_SERIAL + serial_intr()) interrupts. */
+
+    case IRQ_OFFSET + IRQ_KBD:
+        kbd_intr();
+        pic_send_eoi(IRQ_KBD);
+        return;
+
+    case IRQ_OFFSET + IRQ_SERIAL:
+        serial_intr();
+        pic_send_eoi(IRQ_SERIAL);
+        return;
+
     default:
         print_trapframe(tf);
         if (!(tf->tf_cs & 3))
