@@ -121,6 +121,17 @@ int
 gettime(void) {
     // LAB 12: your code here
     int res = 0;
+
+    do {
+        // [dkay]: waiting in a hot loop
+        // since update should not take too long
+        while (cmos_read8(RTC_AREG) & RTC_UPDATE_IN_PROGRESS) {}
+
+        res = get_time();
+        // [dkay]: repeating in a loop
+        // since update may start while we are reading
+    } while (res != get_time());
+
     return res;
 }
 

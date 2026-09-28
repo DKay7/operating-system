@@ -309,6 +309,9 @@ trap_dispatch(struct Trapframe *tf) {
 
     case IRQ_OFFSET + IRQ_CLOCK:
     case IRQ_OFFSET + IRQ_TIMER:
+        // LAB 12: Your code here
+        vsys[VSYS_gettime] = gettime();
+
         // LAB 4: Your code here
         // rtc_timer_pic_handle();
 
@@ -317,7 +320,7 @@ trap_dispatch(struct Trapframe *tf) {
             panic("No timer interrupt handler configured");
         timer_for_schedule->handle_interrupts();
         sched_yield();
-        // LAB 12: Your code here
+
         return;
 
     // LAB 11: Your code here

@@ -4,8 +4,10 @@
 static inline uint64_t
 vsyscall(int num) {
     // LAB 12: Your code here
-    (void)num;
-    return 0;
+    assert(num >= 0);
+    assert(num < NVSYSCALLS);
+
+    return vsys[num];
 }
 
 int

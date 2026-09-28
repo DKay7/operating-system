@@ -104,6 +104,15 @@ env_init(void) {
      * kzalloc_region only works with current_space != NULL */
     // LAB 12: Your code here
 
+    const size_t vsys_size_rounded = ROUNDUP(NVSYSCALLS * sizeof(int), PAGE_SIZE);
+    vsys = kzalloc_region(vsys_size_rounded);
+    assert(vsys != NULL);
+
+    int retcode =
+            map_region(&kspace, (uintptr_t)UVSYS, &kspace, (uintptr_t)vsys,
+                       vsys_size_rounded, PROT_USER_ | PROT_R);
+    assert(retcode == 0);
+
     /* Allocate envs array with kzalloc_region().
      * Don't forget about rounding.
      * kzalloc_region() only works with current_space != NULL */
@@ -116,7 +125,7 @@ env_init(void) {
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
-    int retcode = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs, envs_size_rounded, PROT_USER_ | PROT_R);
+    retcode = map_region(&kspace, UENVS, &kspace, (uintptr_t)envs, envs_size_rounded, PROT_USER_ | PROT_R);
     assert(retcode == 0);
 
     /* Set up envs array */

@@ -8,6 +8,17 @@
 # TIP: Use constants UVSYS, UENVS, UVPT, UVPD, UVPDP, UVPML4
 #      via '.set' and '.global' assembly directives
 # LAB 12: Your code here
+.globl envs
+.set envs, UENVS
+
+.globl vsys
+.set vsys, UVSYS
+
+.globl uvpt, uvpd, uvpdp, uvpml4
+.set uvpt, UVPT
+.set uvpd, UVPD
+.set uvpdp, UVPDP
+.set uvpml4, UVPML4
 
 # Entrypoint - this is where the kernel (or our parent environment)
 # starts us running when we are initially loaded into a new environment
