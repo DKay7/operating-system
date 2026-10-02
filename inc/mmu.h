@@ -228,9 +228,7 @@ struct Segdesc64 {
     unsigned sd_lim_15_0 : 16;
     unsigned sd_base_15_0 : 16;
     unsigned sd_base_23_16 : 8;
-    unsigned sd_type : 4;
-    unsigned sd_s : 1;          /* 0 = system, 1 = application */
-    unsigned sd_dpl : 2;        /* Descriptor Privilege Level */
+    unsigned sd_type : 4; unsigned sd_s : 1;          /* 0 = system, 1 = application */ unsigned sd_dpl : 2;        /* Descriptor Privilege Level */
     unsigned sd_p : 1;          /* Present */
     unsigned sd_lim_19_16 : 4;  /* High bits of segment limit */
     unsigned sd_avl : 1;        /* Unused (available for software use) */

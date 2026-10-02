@@ -73,7 +73,7 @@ asan_shadow_allocator(struct UTrapframe *utf) {
 
     // check if addres not in shadow memory
     // but not in shadow memory describing itself
-    if (!SHADOW_ADDRESS_VALID(utf->utf_fault_va) &&
+    if (!SHADOW_ADDRESS_VALID(utf->utf_fault_va) || 
         ((uint8_t *)utf->utf_fault_va >= SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_start) &&
          (uint8_t *)utf->utf_fault_va < SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_end)))
         return 0;
@@ -107,9 +107,9 @@ platform_asan_poison(void *addr, size_t size) {
 
 static int
 asan_unpoison_shared_region(void *start, void *end, void *arg) {
-    (void)start, (void)end, (void)arg;
+    (void)arg;
     // LAB 8: Your code here
-    // ???
+    platform_asan_unpoison(start, end - start);
     return 0;
 }
 

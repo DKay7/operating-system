@@ -12,6 +12,7 @@
 #include <kern/timer.h>
 #include <kern/trap.h>
 #include <kern/tsc.h>
+#include <stdint.h>
 
 #define kilo      (1000ULL)
 #define Mega      (kilo * kilo)
@@ -75,6 +76,28 @@ acpi_enable(void) {
         ;
 }
 
+static bool
+checksum_ok(const void *table, size_t len) {
+    const uint8_t *bytes = (uint8_t *)table;
+    uint8_t sum = 0;
+
+    for (size_t i = 0; i < len; i++)
+        sum = (uint8_t)(sum + bytes[i]);
+
+    return sum == 0;
+}
+
+static ACPISDTHeader *
+map_sdt(physaddr_t pa) {
+    ACPISDTHeader *table = mmio_map_region(pa, sizeof(*table));
+    table = mmio_remap_last_region(pa, table, sizeof(*table), table->Length);
+
+    if (!checksum_ok(table, table->Length))
+        panic("ACPI table %.4s checksum mismatch", table->Signature);
+
+    return table;
+}
+
 static void *
 acpi_find_table(const char *sign) {
     /*
@@ -97,26 +120,6 @@ acpi_find_table(const char *sign) {
     ACPISDTHeader *root;
     size_t entry_size;
     size_t entries;
-
-    bool checksum_ok(const void *table, size_t len) {
-        const uint8_t *bytes = table;
-        uint8_t sum = 0;
-
-        for (size_t i = 0; i < len; i++)
-            sum += bytes[i];
-
-        return sum == 0;
-    }
-
-    ACPISDTHeader *map_sdt(physaddr_t pa) {
-        ACPISDTHeader *table = mmio_map_region(pa, sizeof(*table));
-        table = mmio_remap_last_region(pa, table, sizeof(*table), table->Length);
-
-        if (!checksum_ok(table, table->Length))
-            panic("ACPI table %.4s checksum mismatch", table->Signature);
-
-        return table;
-    }
 
     if (rsdp == NULL) {
         physaddr_t pa = uefi_lp->ACPIRoot;

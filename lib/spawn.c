@@ -127,6 +127,7 @@ spawn(const char *prog, const char **argv) {
     }
 
     close(fd);
+    
 
     /* Copy shared library state. */
     if ((res = foreach_shared_region(copy_shared_region, &child)) < 0)
@@ -284,12 +285,16 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
     /* Allocate filesz - memsz in child */
     res = sys_alloc_region(child, (void *)va, memsz, perm);
     if (res < 0)
-        return -E_NO_MEM;
+        return res;
+
+    /* Nothing to read for pure bss segment */
+    if (!filesz)
+        return 0;
 
     /* Allocate filesz in parent to UTEMP */
     res = sys_alloc_region(0, UTEMP, filesz, PROT_RW | perm);
     if (res < 0)
-        return -E_NO_MEM;
+        return res;
 
     /* seek() fd to fileoffset  */
     res = seek(fd, fileoffset);
@@ -299,7 +304,7 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
     /* read filesz to UTEMP */
     res = readn(fd, UTEMP, filesz);
     if (res != filesz)
-        return res;
+        return res < 0 ? res : -E_NOT_EXEC;
 
     /* Map read section conents to child */
     res = sys_map_region(0, UTEMP, child, (void *)va, filesz, perm);
