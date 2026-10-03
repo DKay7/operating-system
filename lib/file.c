@@ -144,14 +144,27 @@ devfile_write(struct Fd *fd, const void *buf, size_t n) {
     // LAB 10: Your code here:
     ssize_t res0 = 0;
 
-    fsipcbuf.write.req_n = n;
     fsipcbuf.write.req_fileid = fd->fd_file.id;
 
-    size_t size = MIN(n, sizeof(fsipcbuf.write.req_buf));
-    memmove(fsipcbuf.write.req_buf, buf, size);
-    res0 = fsipc(FSREQ_WRITE, NULL);
+    size_t wrote = 0;
 
-    return res0;
+    do {
+        size_t size = MIN(n - wrote, sizeof(fsipcbuf.write.req_buf));
+
+        fsipcbuf.write.req_n = size;
+
+        memmove(fsipcbuf.write.req_buf, (buf + wrote), size);
+
+        res0 = fsipc(FSREQ_WRITE, NULL);
+
+        if (res0 < 0)
+            return res0;
+
+        wrote += res0;
+        
+    } while (wrote != n);
+
+    return wrote;
 }
 
 /* Get file information */

@@ -31,8 +31,16 @@ sys_cputs(const char* s, size_t len) {
     user_mem_assert(curenv, s, len, PROT_R);
 
     // FIXME: copy from user via nosan_memcpy
-    for (int i = 0; i < len; ++i)
-        cputchar(s[i]);
+    const int size = 32;
+    char buf[size];
+
+
+    for (int i = 0; i < len; ++i) {
+        if (i % size == 0)
+            nosan_memcpy(buf, (void *)(s + i), MIN(len - i, size));
+
+        cputchar(buf[i % size]);
+    }
 
     return 0;
 }
