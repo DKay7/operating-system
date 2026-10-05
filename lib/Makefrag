@@ -27,6 +27,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/spawn.c \
 			lib/pipe.c \
 			lib/wait.c \
+			lib/balloc.c \
 			lib/uvpt.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \

@@ -160,6 +160,10 @@ int pipeisclosed(int pipefd);
 /* wait.c */
 void wait(envid_t env);
 
+/* balloc.c */
+void *balloc(size_t n, size_t unit_size);
+void free(void *ptr);
+
 /* File open modes */
 #define O_RDONLY  0x0000 /* open for reading only */
 #define O_WRONLY  0x0001 /* open for writing only */

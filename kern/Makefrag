@@ -73,7 +73,7 @@ KERN_BINFILES := $(shell find prog/ -type f -name '*.c' | sort)
 KERN_BINFILES := $(patsubst %.c, $(OBJDIR)/%_out, $(KERN_BINFILES))
 else
 KERN_BINLINK  := -b binary
-KERN_BINFILES := $(shell find user/ -type f -name '*.c' | sort)
+KERN_BINFILES := $(shell find user/ -path user/wasm -prune -o -type f -name '*.c' -print | sort)
 KERN_BINFILES += fs/fs.c
 KERN_BINFILES := $(patsubst %.c, $(OBJDIR)/%, $(KERN_BINFILES))
 endif

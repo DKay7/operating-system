@@ -1,0 +1,50 @@
+# WebAssembly JIT for JOS: builds $(OBJDIR)/user/wasm/wasm.
+# Every .c under user/wasm (except tests/) is picked up automatically.
+
+WASM_SRCFILES := $(shell find user/wasm -path user/wasm/tests -prune -o -name '*.c' -print)
+WASM_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(WASM_SRCFILES))
+
+OBJDIRS += $(sort $(dir $(WASM_OBJFILES:$(OBJDIR)/%=%)))
+
+# Project headers are included from user/wasm: #include "parser/reader.h".
+# This rule has a shorter stem than $(OBJDIR)/user/%.o, so make prefers it.
+WASM_INCLUDES := -Iuser/wasm
+
+$(OBJDIR)/user/wasm/%.o: user/wasm/%.c $(OBJDIR)/.vars.USER_CFLAGS
+	@echo + cc[USER] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) $(USER_CFLAGS) $(USER_SAN_CFLAGS) $(WASM_INCLUDES) -c -o $@ $<
+
+$(OBJDIR)/user/wasm/wasm: $(WASM_OBJFILES) $(OBJDIR)/lib/entry.o $(USERLIBS:%=$(OBJDIR)/lib/lib%.a) $(USER_EXTRA_OBJFILES) user/user.ld
+	@echo + ld $@
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) $(USER_SAN_LDFLAGS) -nostdlib $(OBJDIR)/lib/entry.o $(USER_EXTRA_OBJFILES) $(WASM_OBJFILES) -L$(OBJDIR)/lib $(USERLIBS:%=-l%) $(GCC_LIB)
+	$(V)$(OBJDUMP) -S $@ > $@.asm
+	$(V)$(NM) -n $@ > $@.sym
+
+# Test modules, all of them go to the fs image:
+#   tests/*.c    -> clang --target=wasm32 (MVP features only, no libc)
+#   tests/*.wat  -> wat2wasm, only if wabt is installed
+#   tests/*.wasm -> used as is
+WASM_CC ?= clang
+WASM_CFLAGS := --target=wasm32 -mcpu=mvp -O2 -nostdlib -Wall \
+               -Wl,--no-entry -Wl,--export-all
+WAT2WASM ?= wat2wasm
+
+WASM_TESTS := $(wildcard user/wasm/tests/*.wasm)
+WASM_TESTS += $(patsubst user/wasm/tests/%.c, $(OBJDIR)/user/wasm/tests/%.wasm, $(wildcard user/wasm/tests/*.c))
+ifneq ($(shell command -v $(WAT2WASM) 2>/dev/null),)
+WASM_TESTS += $(patsubst user/wasm/tests/%.wat, $(OBJDIR)/user/wasm/tests/%.wasm, $(wildcard user/wasm/tests/*.wat))
+endif
+
+$(OBJDIR)/user/wasm/tests/%.wasm: user/wasm/tests/%.c
+	@echo + cc[WASM] $<
+	@mkdir -p $(@D)
+	$(V)$(WASM_CC) $(WASM_CFLAGS) -o $@ $<
+
+$(OBJDIR)/user/wasm/tests/%.wasm: user/wasm/tests/%.wat
+	@echo + wat2wasm $<
+	@mkdir -p $(@D)
+	$(V)$(WAT2WASM) $< -o $@
+
+.PHONY: wasm
+wasm: $(OBJDIR)/user/wasm/wasm $(WASM_TESTS)

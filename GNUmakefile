@@ -312,6 +312,7 @@ ifeq ($(CONFIG_KSPACE),y)
 include prog/Makefrag
 else
 include user/Makefrag
+include user/wasm/Makefrag
 include fs/Makefrag
 endif
 

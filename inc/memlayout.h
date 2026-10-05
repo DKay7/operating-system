@@ -74,8 +74,11 @@
  *                     +------------------------------+ 0x7fffffd000
  *                     |                              |
  *                     |                              |
- *                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- *                     .                              .
+ *  USER_HEAP_END -->  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *                     |                              |
+ *                     |         Program heap         |
+ *                     |                              |
+ * USER_HEAP_START --> |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
  *                     .                              .
  *                     .                              .
  *                     |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
@@ -168,6 +171,10 @@
 /* Max number of open files in the file system at once */
 #define MAXOPEN   512
 #define FILE_BASE 0x200000000
+
+#define HEAP_START 0x100000000
+#define HEAP_SIZE  0x020000000 // 512 Mb
+#define HEAP_END   (HEAP_START + HEAP_SIZE)
 
 #ifdef SAN_ENABLE_KASAN
 /* (this *should* be defined as a literal number) */
