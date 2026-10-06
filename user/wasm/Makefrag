@@ -30,7 +30,7 @@ WASM_CFLAGS := --target=wasm32 -mcpu=mvp -O2 -nostdlib -Wall \
                -Wl,--no-entry -Wl,--export-all
 WAT2WASM ?= wat2wasm
 
-WASM_TESTS := $(wildcard user/wasm/tests/*.wasm)
+WASM_TESTS := $(wildcard user/wasm/tests/*.wasm) user/wasm/tests/run.sh
 WASM_TESTS += $(patsubst user/wasm/tests/%.c, $(OBJDIR)/user/wasm/tests/%.wasm, $(wildcard user/wasm/tests/*.c))
 ifneq ($(shell command -v $(WAT2WASM) 2>/dev/null),)
 WASM_TESTS += $(patsubst user/wasm/tests/%.wat, $(OBJDIR)/user/wasm/tests/%.wasm, $(wildcard user/wasm/tests/*.wat))

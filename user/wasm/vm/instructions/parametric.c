@@ -11,8 +11,8 @@ vm_drop(CallCtx* ctx) {
 void
 vm_select(CallCtx* ctx) {
     uint64_t cond = pop(ctx->stack);
-    uint64_t if_true = pop(ctx->stack);
     uint64_t if_false = pop(ctx->stack);
+    uint64_t if_true = pop(ctx->stack);
 
     if (cond)
         push(ctx->stack, if_true);

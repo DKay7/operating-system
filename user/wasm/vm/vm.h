@@ -23,6 +23,10 @@ typedef struct {
     LabelStack labels;
 
     uint32_t call_depth;
+
+    // JitCode per function (vm/jit/jit.h), NULL if not compiled;
+    // the whole array is NULL when the JIT is off
+    void** jit_code;
 } VM;
 
 typedef struct {

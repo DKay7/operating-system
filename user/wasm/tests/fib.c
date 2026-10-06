@@ -1,6 +1,6 @@
 
-// i would call it Fuckbonacchi 
-// for the amount of fecking i should experineced
+// i would call it fuckbonacchi 
+// for the amount of fucking i should experineced
 // to make a single line working
 int
 fib(int n) {

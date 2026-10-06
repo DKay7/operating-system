@@ -1,9 +1,4 @@
 // Opcode DSL: OP_DEF(OP_NAME, byte, name, imm)
-//   OP_NAME  - constant in enum Opcode (common/opcodes.h)
-//   name     - suffix of handlers: vm_<name> (interpreter), jit_<name> (JIT)
-//   imm      - immediates after the opcode byte (spec 5.4), see skip_<imm> in opcodes.c:
-//              none, blocktype, idx, br_table, call_indirect, memarg, memidx, i32, i64
-// Wasm 1.0, floats are not supported
 
 // control
 OP_DEF(OP_UNREACHABLE, 0x00, unreachable, none)

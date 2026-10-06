@@ -4,6 +4,7 @@
 #include "vm/interp_call.h"
 #include "common/check.h"
 #include "common/opcodes.h"
+#include "vm/jit/jit.h"
 #include "vm/stack.h"
 #include "vm/vm.h"
 
@@ -14,8 +15,16 @@ interp_call(VM* vm, uint32_t func_idx) {
 
     CallCtx* ctx = &call;
 
-    // the function ends when its code is over: after the last `end`, or
-    // after a br/return to the entry label, which jumps to the end of code
+
+    // use jit if available
+    if (vm->jit_code && vm->jit_code[func_idx]) {
+        JitCode code = vm->jit_code[func_idx];
+        uint64_t* sp = code(ctx, &ctx->stack->data[ctx->stack->top], ctx->locals);
+        ctx->stack->top = sp - ctx->stack->data;
+        callctx_leave(ctx);
+        return;
+    }
+
     while (reader_remaining(&ctx->code) > 0) {
         ctx->pc = ctx->code.offset;
         uint8_t opcode = read_u8(&ctx->code);
@@ -63,14 +72,13 @@ callctx_init(CallCtx* call_ctx, VM* vm, uint32_t func_idx) {
 
     // creating a implicit 'entry' block
     // to make my life a little bit easier
-    // it has no header in the code, so it is filled here, not by label_init
     Label entry = {
-        .kind = LABEL_BLOCK,
-        .arity = type->nresult,
-        .height = vm->stack.top, // operands start right after the locals
-        .start = 0,
-        .end = func->code_size,
-        .else_start = 0,
+            .kind = LABEL_BLOCK,
+            .arity = type->nresult,
+            .height = vm->stack.top, // operands start right after the locals
+            .start = 0,
+            .end = func->code_size,
+            .else_start = 0,
     };
     label_push(call_ctx->labels, entry);
 }
