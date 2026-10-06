@@ -1,5 +1,3 @@
-// Interpreter handlers: block, loop, if, br, call, return
-
 #include "common/check.h"
 #include "parser/reader.h"
 #include "vm/interp_call.h"
@@ -7,7 +5,6 @@
 #include "vm/stack.h"
 #include "vm/vm.h"
 
-// control
 
 void
 vm_unreachable(CallCtx* ctx) {

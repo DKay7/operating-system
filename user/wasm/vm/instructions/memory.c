@@ -1,4 +1,3 @@
-// Interpreter handlers: loads, stores, memory.size/grow
 
 #include <inc/string.h>
 
@@ -8,119 +7,92 @@
 #include "vm/stack.h"
 #include "vm/vm.h"
 
-// memory: all have memarg immediate (align:u32, offset:u32)
-
-void
-vm_i32_load(CallCtx* ctx) {
-    // memarg immediate: alignment hint (ignored) and static offset
+// does the same as lea instruction in x86
+// but im not gonna call it load_*
+// since it does not loading
+static uint8_t*
+get_effective_addr(CallCtx* ctx, uint64_t size) {
+    // ignore aligment
     read_u32_leb(&ctx->code);
+
     uint32_t offset = read_u32_leb(&ctx->code);
 
-    // effective address = dynamic address from the stack + static offset, in 64 bits
-    uint64_t addr = (uint64_t)(uint32_t)pop(ctx->stack) + offset;
-    CHECK(addr + sizeof(uint32_t) <= ctx->vm->mem_size, "out of bounds memory access\n");
+    // the address is an i32; the sum is done in 64 bits, so it can't overflow
+    uint64_t addr = (uint32_t)pop(ctx->stack);
+    addr += offset;
 
-    uint32_t value;
-    memcpy(&value, ctx->vm->memory + addr, sizeof(value)); // may be unaligned
-    push(ctx->stack, value);
+    CHECK(addr + size <= ctx->vm->mem_size, "out of bounds memory access\n");
+
+    return ctx->vm->memory + addr;
 }
 
-void
-vm_i64_load(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+#define LOAD(name, width, memtype)                                \
+    void name(CallCtx* ctx) {                                     \
+        memtype value = 0;                                        \
+        uint8_t* addr = get_effective_addr(ctx, sizeof(memtype)); \
+        /* memcpy since addr may be unaligned*/                   \
+        memcpy(&value, addr, sizeof(memtype));                    \
+        push(ctx->stack, (uint##width##_t)value);                 \
+    }
 
-void
-vm_i32_load8_s(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+// clang-format off
+LOAD(vm_i32_load,     32, uint32_t);   
+LOAD(vm_i64_load,     64, uint64_t);
 
-void
-vm_i32_load8_u(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+LOAD(vm_i32_load8_s,  32, int8_t);     
+LOAD(vm_i64_load8_s,  64, int8_t);
 
-void
-vm_i32_load16_s(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+LOAD(vm_i32_load8_u,  32, uint8_t);    
+LOAD(vm_i64_load8_u,  64, uint8_t);
 
-void
-vm_i32_load16_u(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+LOAD(vm_i32_load16_s, 32, int16_t);    
+LOAD(vm_i64_load16_s, 64, int16_t);
 
-void
-vm_i64_load8_s(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+LOAD(vm_i32_load16_u, 32, uint16_t);   
+LOAD(vm_i64_load16_u, 64, uint16_t);
 
-void
-vm_i64_load8_u(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+LOAD(vm_i64_load32_s, 64, int32_t);
+LOAD(vm_i64_load32_u, 64, uint32_t);
+// clang-format on
+#undef LOAD
 
-void
-vm_i64_load16_s(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
 
-void
-vm_i64_load16_u(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+#define STORE(name, memtype)                                      \
+    void name(CallCtx* ctx) {                                     \
+        memtype value = (memtype)pop(ctx->stack);                 \
+        uint8_t* addr = get_effective_addr(ctx, sizeof(memtype)); \
+        /* memcpy since addr may be unaligned*/                   \
+        memcpy(addr, &value, sizeof(memtype));                    \
+    }
 
-void
-vm_i64_load32_s(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+// clang-format off
+STORE(vm_i32_store,   uint32_t);
+STORE(vm_i64_store,   uint64_t);
 
-void
-vm_i64_load32_u(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+STORE(vm_i32_store8,  uint8_t);
+STORE(vm_i64_store8,  uint8_t);
 
-void
-vm_i32_store(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+STORE(vm_i32_store16, uint16_t);
+STORE(vm_i64_store16, uint16_t);
 
-void
-vm_i64_store(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
+STORE(vm_i64_store32, uint32_t);
+// clang-format on
+#undef STORE
 
-void
-vm_i32_store8(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
-
-void
-vm_i32_store16(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
-
-void
-vm_i64_store8(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
-
-void
-vm_i64_store16(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
-
-void
-vm_i64_store32(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
-}
 
 void
 vm_memory_size(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
+    read_u8(&ctx->code); // always 0 in wasm1.0
+    push(ctx->stack, (uint32_t)(ctx->vm->mem_size / WASM_PAGE_SIZE));
 }
 
 void
 vm_memory_grow(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
+    // not actually supported for now since it requires to have realloc
+    // maybe layter...
+    // for now just stor -1 indicating oom
+
+    read_u8(&ctx->code); // always 0 in wasm1.0
+    pop(ctx->stack);
+    push(ctx->stack, (uint32_t)-1);
 }

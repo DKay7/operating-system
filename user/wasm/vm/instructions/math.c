@@ -35,17 +35,38 @@ vm_i64_const(CallCtx* ctx) {
     }
 
 // clang-format off
-EQZ(32);                 EQZ(64);
-CMP(32, eq, ==, u);      CMP(64, eq, ==, u);
-CMP(32, ne, !=, u);      CMP(64, ne, !=, u);
-CMP(32, lt_s, <, s);     CMP(64, lt_s, <, s);
-CMP(32, lt_u, <, u);     CMP(64, lt_u, <, u);
-CMP(32, gt_s, >, s);     CMP(64, gt_s, >, s);
-CMP(32, gt_u, >, u);     CMP(64, gt_u, >, u);
-CMP(32, le_s, <=, s);    CMP(64, le_s, <=, s);
-CMP(32, le_u, <=, u);    CMP(64, le_u, <=, u);
-CMP(32, ge_s, >=, s);    CMP(64, ge_s, >=, s);
-CMP(32, ge_u, >=, u);    CMP(64, ge_u, >=, u);
+EQZ(32);
+EQZ(64);
+
+CMP(32, eq, ==, u);
+CMP(64, eq, ==, u);
+
+CMP(32, ne, !=, u);
+CMP(64, ne, !=, u);
+
+CMP(32, lt_s, <, s);
+CMP(64, lt_s, <, s);
+
+CMP(32, lt_u, <, u);
+CMP(64, lt_u, <, u);
+
+CMP(32, gt_s, >, s);
+CMP(64, gt_s, >, s);
+
+CMP(32, gt_u, >, u);
+CMP(64, gt_u, >, u);
+
+CMP(32, le_s, <=, s);
+CMP(64, le_s, <=, s);
+
+CMP(32, le_u, <=, u);
+CMP(64, le_u, <=, u);
+
+CMP(32, ge_s, >=, s);
+CMP(64, ge_s, >=, s);
+
+CMP(32, ge_u, >=, u);
+CMP(64, ge_u, >=, u);
 // clang-format on
 
 // wasm wants the width iv value = 0
@@ -65,9 +86,14 @@ static uint64_t popcnt64(uint64_t value) { return __builtin_popcountll(value); }
     }
 
 // clang-format off
-BITCOUNT(32, clz);       BITCOUNT(64, clz);
-BITCOUNT(32, ctz);       BITCOUNT(64, ctz);
-BITCOUNT(32, popcnt);    BITCOUNT(64, popcnt);
+BITCOUNT(32, clz);
+BITCOUNT(64, clz);
+
+BITCOUNT(32, ctz);
+BITCOUNT(64, ctz);
+
+BITCOUNT(32, popcnt);
+BITCOUNT(64, popcnt);
 // clang-format on
 
 #define BINOP(width, name, op)                 \
@@ -78,12 +104,23 @@ BITCOUNT(32, popcnt);    BITCOUNT(64, popcnt);
     }
 
 // clang-format off
-BINOP(32, add, +);       BINOP(64, add, +);
-BINOP(32, sub, -);       BINOP(64, sub, -);
-BINOP(32, mul, *);       BINOP(64, mul, *);
-BINOP(32, and, &);       BINOP(64, and, &);
-BINOP(32, or, |);        BINOP(64, or, |);
-BINOP(32, xor, ^);       BINOP(64, xor, ^);
+BINOP(32, add, +);
+BINOP(64, add, +);
+
+BINOP(32, sub, -);
+BINOP(64, sub, -);
+
+BINOP(32, mul, *);
+BINOP(64, mul, *);
+
+BINOP(32, and, &);
+BINOP(64, and, &);
+
+BINOP(32, or, |);
+BINOP(64, or, |);
+
+BINOP(32, xor, ^);
+BINOP(64, xor, ^);
 // clang-format on
 
 #define SHIFT(width, name, op, sign)                                    \
@@ -94,9 +131,14 @@ BINOP(32, xor, ^);       BINOP(64, xor, ^);
     }
 
 // clang-format off
-SHIFT(32, shl, <<, u);   SHIFT(64, shl, <<, u);
-SHIFT(32, shr_s, >>, s); SHIFT(64, shr_s, >>, s);
-SHIFT(32, shr_u, >>, u); SHIFT(64, shr_u, >>, u);
+SHIFT(32, shl, <<, u);
+SHIFT(64, shl, <<, u);
+
+SHIFT(32, shr_s, >>, s);
+SHIFT(64, shr_s, >>, s);
+
+SHIFT(32, shr_u, >>, u);
+SHIFT(64, shr_u, >>, u);
 // clang-format on
 
 //
@@ -111,8 +153,11 @@ SHIFT(32, shr_u, >>, u); SHIFT(64, shr_u, >>, u);
     }
 
 // clang-format off
-ROT(32, rotl, <<, >>);   ROT(64, rotl, <<, >>);
-ROT(32, rotr, >>, <<);   ROT(64, rotr, >>, <<);
+ROT(32, rotl, <<, >>);   
+ROT(64, rotl, <<, >>);
+
+ROT(32, rotr, >>, <<);   
+ROT(64, rotr, >>, <<);
 // clang-format on
 
 
@@ -143,9 +188,15 @@ ROT(32, rotr, >>, <<);   ROT(64, rotr, >>, <<);
     }
 
 // clang-format off
-DIV_U(32, div_u, /);     DIV_U(64, div_u, /);
-DIV_U(32, rem_u, %);     DIV_U(64, rem_u, %);
-DIV_S(32);               DIV_S(64);
-REM_S(32);               REM_S(64);
-// clang-format on
+DIV_U(32, div_u, /);     
+DIV_U(64, div_u, /);
 
+DIV_U(32, rem_u, %);     
+DIV_U(64, rem_u, %);
+
+DIV_S(32);
+DIV_S(64);
+
+REM_S(32);
+REM_S(64);
+// clang-format on

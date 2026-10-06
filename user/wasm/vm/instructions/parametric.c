@@ -1,4 +1,3 @@
-// Interpreter handlers: drop, select
 
 #include "vm/interp_call.h"
 #include "vm/vm.h"
@@ -6,10 +5,17 @@
 // parametric
 void
 vm_drop(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
+    pop(ctx->stack);
 }
 
 void
 vm_select(CallCtx* ctx) {
-    NOT_IMPLEMENTED();
+    uint64_t cond = pop(ctx->stack);
+    uint64_t if_true = pop(ctx->stack);
+    uint64_t if_false = pop(ctx->stack);
+
+    if (cond)
+        push(ctx->stack, if_true);
+    else
+        push(ctx->stack, if_false);
 }
