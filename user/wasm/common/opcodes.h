@@ -11,7 +11,6 @@ typedef enum {
 
 #undef OP_DEF
 
-// "i32_add" for OP_I32_ADD, "?" for unknown bytes
 static inline const char*
 opcode_name(uint8_t opcode) {
     switch (opcode) {
@@ -24,5 +23,6 @@ opcode_name(uint8_t opcode) {
     return "?";
 }
 
-// Skip the immediates of `opcode`; the reader must be right after the opcode byte
 void skip_immediates(uint8_t opcode, Reader* code);
+
+void opcode_stack_effect(uint8_t opcode, uint32_t* pops, uint32_t* pushes);

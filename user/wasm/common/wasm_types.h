@@ -8,7 +8,6 @@ typedef enum : uint8_t {
     // f32 = 0x7d and f64 = 0x7c are not supported
 } ValueType;
 
-// blocktype of block/loop/if without a result; otherwise blocktype is the ValueType of the result
 #define BLOCK_TYPE_EMPTY 0x40
 
 typedef enum : uint8_t {

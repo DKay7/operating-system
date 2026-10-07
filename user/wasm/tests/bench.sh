@@ -1,10 +1,11 @@
 #!/bin/bash
 # Boot JOS in QEMU, run tests/run.sh there and save a table to a host file:
 #   test | expected | got | cycles
-# Usage (from the jos root): user/wasm/tests/bench.sh results.txt
+# Usage (from the jos root): user/wasm/tests/bench.sh results.txt [run.sh | run-jit.sh]
 # Compare two runs: paste interp.txt jit.txt
 
 out=${1:-bench.txt}
+script=${2:-run.sh}
 dir=$(mktemp -d)
 mkfifo "$dir/in"
 
@@ -16,7 +17,7 @@ wait_for() {
 }
 
 wait_for '^\$ '                  # shell prompt
-printf 'sh run.sh\r' >&3
+printf 'sh %s\r' "$script" >&3
 wait_for 'wasm tests done'
 printf '\001x' >&3               # Ctrl-A x: quit QEMU
 wait
@@ -25,7 +26,7 @@ wait
 tr -d '\r' <"$dir/log" | awk '
     /, expected / { split($0, part, ", expected "); name = part[1]; expected = part[2]; got = "-" }
     / = /         { got = $3 }
-    /^cycles: /   { printf "%-24s | %-12s | %-12s | %s\n", name, $2 }
+    /^cycles: /   { printf "%-24s | %s\n", name, $2 }
 ' >"$out"
 
 rm -r "$dir"

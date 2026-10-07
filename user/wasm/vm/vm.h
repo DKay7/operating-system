@@ -5,48 +5,39 @@
 #include "vm/stack.h"
 #include "vm/label.h"
 
-#define STACK_SIZE     (64 * 1024) // values on the value stack
-#define LABELS_SIZE    4096        // labels of all active blocks
-#define MAX_CALL_DEPTH 300         // interp_call recursion uses the JOS stack (64 KB)
+#define STACK_SIZE     (64 * 1024)
+#define LABELS_SIZE    4096
+#define MAX_CALL_DEPTH 300
 #define WASM_PAGE_SIZE (64 * 1024)
 
-// Runtime state of a module, shared by all calls
 typedef struct {
     Module* module;
 
     uint64_t* globals;
 
     uint8_t* memory;
-    uint64_t mem_size; // in bytes
+    uint64_t mem_size;
 
     Stack stack;
     LabelStack labels;
 
     uint32_t call_depth;
 
-    // JitCode per function (vm/jit/jit.h), NULL if not compiled;
-    // the whole array is NULL when the JIT is off
     void** jit_code;
 } VM;
 
 typedef struct {
     VM* vm;
-    Stack* stack;     // == &vm->stack, for short push(ctx->stack, ...)
+    Stack* stack;
     Func* func;
-    Reader code;      // current position in the function body
-    size_t pc;        // offset of the instruction being executed, for debug
-    uint64_t* locals; // params, then declared locals
+    Reader code;
+    size_t pc; // offset of the instruction being executed, for debug
+    uint64_t* locals;
 
-    LabelStack* labels;   // == &vm->labels
-    uint32_t labels_base; // labels of this call are [labels_base, labels->top),
-                          // the first one is the entry label of the function body
+    LabelStack* labels;
+    uint32_t labels_base; // labels of this call are [labels_base, labels->top)
 } CallCtx;
 
 void vm_init(VM* vm, Module* module);
-
-// Returns false if there is no exported function with this name
 bool find_export(Module* module, const char* name, uint32_t* func_idx);
-
-// Arguments are taken from the value stack, the result (if any) is pushed back
 void interp_call(VM* vm, uint32_t func_idx);
-

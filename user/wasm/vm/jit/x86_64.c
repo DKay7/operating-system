@@ -57,9 +57,35 @@ emit_mem_operand(CodeBuf* buf, uint8_t reg, Reg base, int32_t disp) {
     emit_u32(buf, disp);
 }
 
+// REX.W for 64-bit operands; 32-bit ones need REX only for r8-r15
+static void
+emit_rex_w(CodeBuf* buf, bool w64, uint8_t reg, uint8_t rm) {
+    if (w64)
+        emit_rex(buf, true, reg, rm);
+    else
+        emit_rex_if_needed(buf, reg, rm);
+}
+
+// [REX] op ModRM(mod 11, reg, rm)
+static void
+emit_op_rr(CodeBuf* buf, bool w64, uint8_t opcode, uint8_t reg, uint8_t rm) {
+    emit_rex_w(buf, w64, reg, rm);
+    emit_u8(buf, opcode);
+    emit_modrm(buf, MOD_REG, reg, rm);
+}
+
+// [REX] 0F op ModRM(mod 11, reg, rm)
+static void
+emit_op2_rr(CodeBuf* buf, bool w64, uint8_t opcode, uint8_t reg, uint8_t rm) {
+    emit_rex_w(buf, w64, reg, rm);
+    emit_u8(buf, TWO_BYTE);
+    emit_u8(buf, opcode);
+    emit_modrm(buf, MOD_REG, reg, rm);
+}
+
 void
 x86_mov_r64_imm64(CodeBuf* buf, Reg dst, uint64_t imm) {
-    emit_rex(buf, true, 0, dst);
+    emit_rex_w(buf, true, 0, dst);
     emit_u8(buf, MOV_R64_IMM + (dst & 0x7));
     emit_u64(buf, imm);
 }
@@ -67,16 +93,14 @@ x86_mov_r64_imm64(CodeBuf* buf, Reg dst, uint64_t imm) {
 // dst in ModRM.rm, src in ModRM.reg
 void
 x86_mov_r64_r64(CodeBuf* buf, Reg dst, Reg src) {
-    emit_rex(buf, true, src, dst);
-    emit_u8(buf, MOV_R64_R64);
-    emit_modrm(buf, MOD_REG, src, dst);
+    emit_op_rr(buf, true, MOV_R64_R64, src, dst);
 }
 
 // dst in reg, memory in rm
 // mov dst, [base + disp]
 void
 x86_mov_r64_m64(CodeBuf* buf, Reg dst, Reg base, int32_t disp) {
-    emit_rex(buf, true, dst, base);
+    emit_rex_w(buf, true, dst, base);
     emit_u8(buf, MOV_R64_M64);
     emit_mem_operand(buf, dst, base, disp);
 }
@@ -85,47 +109,157 @@ x86_mov_r64_m64(CodeBuf* buf, Reg dst, Reg base, int32_t disp) {
 // mov [base + disp], src
 void
 x86_mov_m64_r64(CodeBuf* buf, Reg base, int32_t disp, Reg src) {
-    emit_rex(buf, true, src, base);
+    emit_rex_w(buf, true, src, base);
     emit_u8(buf, MOV_R64_R64);
     emit_mem_operand(buf, src, base, disp);
 }
 
 void
-x86_add_r32_r32(CodeBuf* buf, Reg dst, Reg src) {
-    emit_rex_if_needed(buf, src, dst);
-    emit_u8(buf, ADD_RM32_R32);
-    emit_modrm(buf, MOD_REG, src, dst);
-}
-
-void
 x86_add_r64_imm32(CodeBuf* buf, Reg dst, int32_t imm) {
-    emit_rex(buf, true, ADD_IMM_EXT, dst);
-    emit_u8(buf, ADD_RM64_IMM);
-    emit_modrm(buf, MOD_REG, ADD_IMM_EXT, dst);
+    emit_op_rr(buf, true, ADD_RM64_IMM, ADD_IMM_EXT, dst);
     emit_u32(buf, imm);
 }
 
 // no ModRM since always 64, so REX only for r8-r15
 void
 x86_push_r64(CodeBuf* buf, Reg reg) {
-    emit_rex_if_needed(buf, 0, reg);
+    emit_rex_w(buf, false, 0, reg);
     emit_u8(buf, PUSH_R64 + (reg & 0x7));
 }
 
 void
 x86_pop_r64(CodeBuf* buf, Reg reg) {
-    emit_rex_if_needed(buf, 0, reg);
+    emit_rex_w(buf, false, 0, reg);
     emit_u8(buf, POP_R64 + (reg & 0x7));
 }
 
 void
 x86_call_r64(CodeBuf* buf, Reg target) {
-    emit_rex_if_needed(buf, CALL_EXT, target);
-    emit_u8(buf, CALL_RM64);
-    emit_modrm(buf, MOD_REG, CALL_EXT, target);
+    emit_op_rr(buf, false, CALL_RM64, CALL_EXT, target);
 }
 
 void
 x86_ret(CodeBuf* buf) {
     emit_u8(buf, RET);
+}
+
+// byte regs 4-7 has different meaning
+// based on REX, so write it down...
+void
+x86_setcc_r8(CodeBuf* buf, Cond cond, Reg dst) {
+    if (dst >= RSP)
+        emit_rex(buf, false, 0, dst);
+    emit_u8(buf, TWO_BYTE);
+    emit_u8(buf, SETCC + cond);
+    emit_modrm(buf, MOD_REG, 0, dst);
+}
+
+void
+x86_movzx_r32_r8(CodeBuf* buf, Reg dst, Reg src) {
+    if (src >= RSP || dst >= R8)
+        emit_rex(buf, false, dst, src); // hatred to x86 grows fucking EXPONENTIALLY
+    emit_u8(buf, TWO_BYTE);
+    emit_u8(buf, MOVZX_R_RM8);
+    emit_modrm(buf, MOD_REG, dst, src);
+}
+
+size_t
+x86_jmp(CodeBuf* buf) {
+    emit_u8(buf, JMP_REL32);
+    size_t at = buf->len;
+    emit_u32(buf, 0);
+    return at;
+}
+
+size_t
+x86_jcc(CodeBuf* buf, Cond cond) {
+    emit_u8(buf, JCC_PREFIX);
+    emit_u8(buf, JCC_REL32 + cond);
+    size_t at = buf->len;
+    emit_u32(buf, 0);
+    return at;
+}
+
+void
+x86_patch_rel32(CodeBuf* buf, size_t at, size_t target) {
+    int32_t rel = (int64_t)target - (int64_t)(at + 4);
+    for (int idx = 0; idx < 4; ++idx)
+        buf->staging[at + idx] = (uint32_t)rel >> (8 * idx);
+}
+
+// "OP r/m, r": dst in rm, src in reg
+#define ALU_RR(name, w64, bits, opcode)                                   \
+    void x86_##name##_r##bits##_r##bits(CodeBuf* buf, Reg dst, Reg src) { \
+        emit_op_rr(buf, w64, opcode, src, dst);                           \
+    }
+
+// "OP r, r/m": dst in reg, src in rm
+#define ALU2_RR(name, w64, bits, opcode)                                  \
+    void x86_##name##_r##bits##_r##bits(CodeBuf* buf, Reg dst, Reg src) { \
+        emit_op2_rr(buf, w64, opcode, dst, src);                          \
+    }
+
+#define SHIFT_CL(name, w64, bits, ext)                      \
+    void x86_##name##_r##bits##_cl(CodeBuf* buf, Reg dst) { \
+        emit_op_rr(buf, w64, SHIFT_RM_CL, ext, dst);        \
+    }
+
+#define DIV(name, w64, bits, ext)                      \
+    void x86_##name##_r##bits(CodeBuf* buf, Reg src) { \
+        emit_op_rr(buf, w64, DIV_RM, ext, src);        \
+    }
+
+// clang-format off
+ALU_RR(add, false, 32, ADD_RM32_R32);    ALU_RR(add, true, 64, ADD_RM32_R32);
+ALU_RR(sub, false, 32, SUB_RM_R);        ALU_RR(sub, true, 64, SUB_RM_R);
+ALU_RR(and, false, 32, AND_RM_R);        ALU_RR(and, true, 64, AND_RM_R);
+ALU_RR(or, false, 32, OR_RM_R);          ALU_RR(or, true, 64, OR_RM_R);
+ALU_RR(xor, false, 32, XOR_RM_R);        ALU_RR(xor, true, 64, XOR_RM_R);
+ALU_RR(cmp, false, 32, CMP_RM_R);        ALU_RR(cmp, true, 64, CMP_RM_R);
+ALU_RR(test, false, 32, TEST_RM32_R32);  ALU_RR(test, true, 64, TEST_RM32_R32);
+ALU2_RR(imul, false, 32, IMUL_R_RM);     ALU2_RR(imul, true, 64, IMUL_R_RM);
+ALU2_RR(bsr, false, 32, BSR_R_RM);       ALU2_RR(bsr, true, 64, BSR_R_RM);
+ALU2_RR(bsf, false, 32, BSF_R_RM);       ALU2_RR(bsf, true, 64, BSF_R_RM);
+
+SHIFT_CL(shl, false, 32, SHL_EXT);       SHIFT_CL(shl, true, 64, SHL_EXT);
+SHIFT_CL(shr, false, 32, SHR_EXT);       SHIFT_CL(shr, true, 64, SHR_EXT);
+SHIFT_CL(sar, false, 32, SAR_EXT);       SHIFT_CL(sar, true, 64, SAR_EXT);
+SHIFT_CL(rol, false, 32, ROL_EXT);       SHIFT_CL(rol, true, 64, ROL_EXT);
+SHIFT_CL(ror, false, 32, ROR_EXT);       SHIFT_CL(ror, true, 64, ROR_EXT);
+
+DIV(div, false, 32, DIV_EXT);            DIV(div, true, 64, DIV_EXT);
+DIV(idiv, false, 32, IDIV_EXT);          DIV(idiv, true, 64, IDIV_EXT);
+// clang-format on
+
+#undef ALU_RR
+#undef ALU2_RR
+#undef SHIFT_CL
+#undef DIV
+
+void
+x86_cdq(CodeBuf* buf) {
+    emit_u8(buf, CDQ);
+}
+
+void
+x86_cqo(CodeBuf* buf) {
+    emit_rex_w(buf, true, 0, 0);
+    emit_u8(buf, CDQ);
+}
+
+// F3 goes before REX
+static void
+emit_popcnt(CodeBuf* buf, bool w64, Reg dst, Reg src) {
+    emit_u8(buf, PREFIX_F3);
+    emit_op2_rr(buf, w64, POPCNT_R_RM, dst, src);
+}
+
+void
+x86_popcnt_r32_r32(CodeBuf* buf, Reg dst, Reg src) {
+    emit_popcnt(buf, false, dst, src);
+}
+
+void
+x86_popcnt_r64_r64(CodeBuf* buf, Reg dst, Reg src) {
+    emit_popcnt(buf, true, dst, src);
 }

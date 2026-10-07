@@ -36,6 +36,13 @@ ifneq ($(shell command -v $(WAT2WASM) 2>/dev/null),)
 WASM_TESTS += $(patsubst user/wasm/tests/%.wat, $(OBJDIR)/user/wasm/tests/%.wasm, $(wildcard user/wasm/tests/*.wat))
 endif
 
+# the same tests with the JIT: wasm -> wasm -j
+WASM_TESTS += $(OBJDIR)/user/wasm/tests/run-jit.sh
+
+$(OBJDIR)/user/wasm/tests/run-jit.sh: user/wasm/tests/run.sh
+	@mkdir -p $(@D)
+	$(V)sed 's/^wasm /wasm -j /' $< > $@
+
 $(OBJDIR)/user/wasm/tests/%.wasm: user/wasm/tests/%.c
 	@echo + cc[WASM] $<
 	@mkdir -p $(@D)

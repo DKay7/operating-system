@@ -85,7 +85,11 @@ branch(CallCtx* ctx, uint32_t depth) {
     // keep the result, drop everything the block pushed above it
     uint64_t result = target.arity ? pop(ctx->stack) : 0;
     ctx->stack->top = target.height;
-    if (target.arity != 0)
+
+    bool is_loop = target.kind == LABEL_LOOP;
+    uint8_t arity = is_loop ? 0 : target.arity;
+
+    if (arity != 0)
         push(ctx->stack, result);
 
     // drop inner labels

@@ -33,7 +33,6 @@ read_u32_le(Reader *reader) {
     return bytes[0] | bytes[1] << 8 | bytes[2] << 16 | (uint32_t)bytes[3] << 24;
 }
 
-/* A `bits`-wide number takes at most ceil(bits / 7) bytes */
 static uint64_t
 read_leb(Reader *reader, unsigned bits, bool is_signed) {
     uint64_t result = 0;
@@ -43,14 +42,13 @@ read_leb(Reader *reader, unsigned bits, bool is_signed) {
         result |= (uint64_t)(byte & 0x7F) << shift;
 
         if (!(byte & 0x80)) {
-            /* Sign-extend from the last byte's top bit */
             if (is_signed && shift + 7 < 64 && (byte & 0x40))
                 result |= ~0ULL << (shift + 7);
             return result;
         }
     }
 
-    /* Too many bytes */
+    // too many bytes
     reader_fail(reader);
     return 0;
 }

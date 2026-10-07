@@ -27,23 +27,25 @@ interp_call(VM* vm, uint32_t func_idx) {
 
     while (reader_remaining(&ctx->code) > 0) {
         ctx->pc = ctx->code.offset;
-        uint8_t opcode = read_u8(&ctx->code);
-
-        switch (opcode) {
-#define OP_DEF(op, val, name, ...) \
-    case op:                       \
-        vm_##name(ctx);            \
-        break;
-#include "common/opcodes.def"
-#undef OP_DEF
-
-        default:
-            callctx_dump(ctx);
-            CHECK(false, "unsupported opcode 0x%x\n", opcode);
-        }
+        interp_step(ctx, read_u8(&ctx->code));
     }
 
     callctx_leave(ctx);
+}
+
+void
+interp_step(CallCtx* ctx, uint8_t opcode) {
+    switch (opcode) {
+#define OP_DEF(op, val, name, ...) \
+    case op:                       \
+        vm_##name(ctx);            \
+        return;
+#include "common/opcodes.def"
+#undef OP_DEF
+    }
+
+    callctx_dump(ctx);
+    CHECK(false, "unsupported opcode 0x%x\n", opcode);
 }
 
 

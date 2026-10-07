@@ -63,9 +63,23 @@ skip_i64(Reader* code) {
 void
 skip_immediates(uint8_t opcode, Reader* code) {
     switch (opcode) {
-#define OP_DEF(op, val, name, imm) \
+#define OP_DEF(op, val, name, imm, ...) \
     case op:                       \
         skip_##imm(code);          \
+        return;
+#include "common/opcodes.def"
+#undef OP_DEF
+    }
+    CHECK(false, "unknown opcode 0x%x\n", opcode);
+}
+
+void
+opcode_stack_effect(uint8_t opcode, uint32_t* pops, uint32_t* pushes) {
+    switch (opcode) {
+#define OP_DEF(op, val, name, imm, npops, npushes) \
+    case op:                                       \
+        *pops = npops;                             \
+        *pushes = npushes;                         \
         return;
 #include "common/opcodes.def"
 #undef OP_DEF
