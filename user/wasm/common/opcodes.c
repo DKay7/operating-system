@@ -3,26 +3,22 @@
 #include "common/opcodes.h"
 #include "common/check.h"
 
-// One function per immediate kind used in opcodes.def (spec 5.4)
 
 static void
 skip_none(Reader* code) {
     (void)code;
 }
 
-// wasm 1.0: 0x40 (no result) or a value type, one byte
 static void
 skip_blocktype(Reader* code) {
     read_u8(code);
 }
 
-// local, global, function or label index
 static void
 skip_idx(Reader* code) {
     read_u32_leb(code);
 }
 
-// vec(labelidx) + default labelidx
 static void
 skip_br_table(Reader* code) {
     uint32_t count = read_vec_len(code);
@@ -30,21 +26,18 @@ skip_br_table(Reader* code) {
         read_u32_leb(code);
 }
 
-// typeidx + 0x00 (table index)
 static void
 skip_call_indirect(Reader* code) {
     read_u32_leb(code);
     read_u8(code);
 }
 
-// align + offset
 static void
 skip_memarg(Reader* code) {
     read_u32_leb(code);
     read_u32_leb(code);
 }
 
-// 0x00 (memory index) of memory.size / memory.grow
 static void
 skip_memidx(Reader* code) {
     read_u8(code);

@@ -71,7 +71,7 @@ typedef struct {
     uint32_t nglobals;
     Export *exports;
     uint32_t nexports;
-    // Data *data;
+    // Data *data; todo: :(
     uint32_t ndata;
     bool has_memory;
     uint32_t mem_min, mem_max;

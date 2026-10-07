@@ -98,7 +98,6 @@ callctx_leave(CallCtx* call_ctx) {
     } else
         call_ctx->stack->top = call_get_locals_base(call_ctx);
 
-    // `return` may leave from inside blocks: drop their labels
     call_ctx->labels->top = call_ctx->labels_base;
 
     call_ctx->vm->call_depth--;
