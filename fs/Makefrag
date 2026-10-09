@@ -36,7 +36,7 @@ USERAPPS :=		$(OBJDIR)/user/init \
 			$(OBJDIR)/user/wasm/wasm \
 
 
-FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS) $(WASM_TESTS)
+FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS) $(WASM_TESTS) $(WASM_WASI)
 
 $(OBJDIR)/fs/%.o: fs/%.c fs/fs.h fs/pci.h fs/nvme.h inc/lib.h $(OBJDIR)/.vars.USER_CFLAGS
 	@echo + cc[USER] $<

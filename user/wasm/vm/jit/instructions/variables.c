@@ -36,3 +36,13 @@ jit_local_tee(JitCtx* jit) {
     x86_mov_m64_r64(jit->buf, R12, idx * sizeof(uint64_t), RAX);
     return true;
 }
+
+bool
+jit_global_get(JitCtx* jit) {
+    return false;
+}
+
+bool
+jit_global_set(JitCtx* jit) {
+    return false;
+}

@@ -123,3 +123,15 @@ OP_DEF(OP_I64_ROTR, 0x8A, i64_rotr, none, 2, 1)
 OP_DEF(OP_I32_WRAP_I64, 0xA7, i32_wrap_i64, none, 1, 1)
 OP_DEF(OP_I64_EXTEND_I32_S, 0xAC, i64_extend_i32_s, none, 1, 1)
 OP_DEF(OP_I64_EXTEND_I32_U, 0xAD, i64_extend_i32_u, none, 1, 1)
+
+// sign extension
+OP_DEF(OP_I32_EXTEND8_S, 0xC0, i32_extend8_s, none, 1, 1)
+OP_DEF(OP_I32_EXTEND16_S, 0xC1, i32_extend16_s, none, 1, 1)
+OP_DEF(OP_I64_EXTEND8_S, 0xC2, i64_extend8_s, none, 1, 1)
+OP_DEF(OP_I64_EXTEND16_S, 0xC3, i64_extend16_s, none, 1, 1)
+OP_DEF(OP_I64_EXTEND32_S, 0xC4, i64_extend32_s, none, 1, 1)
+
+// 0xFC prefix: memory.copy, memory.fill
+OP_DEF(OP_MISC, 0xFC, misc, misc, 3, 0)
+
+#include "common/float_opcodes.def"

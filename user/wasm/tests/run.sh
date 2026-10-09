@@ -37,4 +37,25 @@ wasm sort.wasm sort 1000 42
 echo mandel 32, expected 183
 wasm mandel.wasm mandel 32
 
+echo switch_sum 10, expected 30357
+wasm switch.wasm switch_sum 10
+
+echo mem_mix 7, expected 2376329628246401536
+wasm memory.wasm mem_mix 7
+
+echo select_mix 100, expected 1456
+wasm select.wasm select_mix 100
+
+echo shift_mix 1000, expected 290050823
+wasm shift.wasm shift_mix 1000
+
+echo shift_wide -5 33, expected 2147483638
+wasm shift.wasm shift_wide -5 33
+
+echo divext_mix 500, expected -9125785455136700460
+wasm divext.wasm divext_mix 500
+
+echo div_u 4000000000 3, expected 1333333333
+wasm divext.wasm div_u 4000000000 3
+
 echo wasm tests done

@@ -2,6 +2,7 @@
 #include <inc/string.h>
 
 #include "common/check.h"
+#include "common/opcodes.h"
 #include "parser/reader.h"
 #include "vm/interp_call.h"
 #include "vm/stack.h"
@@ -17,7 +18,7 @@ get_effective_addr(CallCtx* ctx, uint64_t size) {
 
     uint32_t offset = read_u32_leb(&ctx->code);
 
-    // the address is an i32; the sum is done in 64 bits, so it can't overflow
+    // the address is an i32; the sum is done in 64, so it can't overflow
     uint64_t addr = (uint32_t)pop(ctx->stack);
     addr += offset;
 
@@ -91,8 +92,61 @@ vm_memory_grow(CallCtx* ctx) {
     // not actually supported for now since it requires to have realloc
     // maybe layter...
     // for now just stor -1 indicating oom
-
+    // which is totally fine
+    // or maybe i care/...
+    // fucking doom
+    //
     read_u8(&ctx->code); // always 0 in wasm1.0
-    pop(ctx->stack);
-    push(ctx->stack, (uint32_t)-1);
+    uint64_t delta = pop(ctx->stack);
+    uint64_t old_sz = ctx->vm->mem_size / WASM_PAGE_SIZE;
+    if (old_sz + delta > ctx->vm->mem_capacity / WASM_PAGE_SIZE) {
+        push(ctx->stack, (uint32_t)-1);
+        return;
+    }
+
+    ctx->vm->mem_size += delta * WASM_PAGE_SIZE;
+    push(ctx->stack, old_sz);
+}
+
+static void
+vm_memory_copy(CallCtx* ctx) {
+
+    // skip imm
+    read_u32_leb(&ctx->code);
+    read_u32_leb(&ctx->code);
+
+    uint64_t n = pop(ctx->stack);
+    uint64_t src = pop(ctx->stack);
+    uint64_t dst = pop(ctx->stack);
+    // skip checks since i dont care if dumb programmer makes mistakes
+    // just write code with no bugs bro
+    memmove(ctx->vm->memory + dst, ctx->vm->memory + src, n);
+}
+
+static void
+vm_memory_fill(CallCtx* ctx) {
+    // skip imm
+    read_u32_leb(&ctx->code);
+
+    uint64_t n = pop(ctx->stack);
+    uint8_t val = pop(ctx->stack);
+    uint64_t dst = pop(ctx->stack);
+    // skip checks since i dont care if dumb programmer makes mistakes
+    // just write code with no bugs bro
+    memset(ctx->vm->memory + dst, val, n);
+}
+
+void
+vm_misc(CallCtx* ctx) {
+    uint32_t op = read_u32_leb(&ctx->code);
+    switch (op) {
+    case MISC_MEMORY_COPY:
+        vm_memory_copy(ctx);
+        return;
+    case MISC_MEMORY_FILL:
+        vm_memory_fill(ctx);
+        return;
+    }
+    callctx_dump(ctx);
+    CHECK(false, "unknown 0xFC opcode %u\n", op);
 }

@@ -1,5 +1,6 @@
-/* wasm [-j] <file.wasm> [export] [args...] -- load a module and run one of its functions */
-
+/* wasm [-j] [-f] <file.wasm> [export] [args...] */
+// wasm -j -f doom.wasm _start -iwad doom1.wad -chars block -scaling 2
+//
 #include <inc/args.h>
 #include <inc/lib.h>
 #include <inc/x86.h>
@@ -9,6 +10,7 @@
 #include "parser/parser.h"
 #include "vm/jit/jit.h"
 #include "vm/vm.h"
+#include "vm/wasi.h"
 
 typedef struct {
     bool use_jit;
@@ -16,6 +18,8 @@ typedef struct {
     const char* func_name; // "main" if not given
     char** args;           // arguments of the function
     int nargs;
+    char** wasi_argv;
+    int wasi_argc;
 } Options;
 
 static uint64_t run(VM* vm, uint32_t func_idx);
@@ -42,11 +46,15 @@ umain(int argc, char** argv) {
     if (options.use_jit)
         jit_compile_module(vm);
 
-    push_args(vm, type, options.args, options.nargs);
+    if (type->nparam == 0)
+        wasi_set_args(options.wasi_argc, options.wasi_argv);
+    else
+        push_args(vm, type, options.args, options.nargs);
     uint64_t cycles = run(vm, func_idx);
 
     print_result(vm, type, options.func_name);
     printf("cycles: %lu\n", cycles);
+    jit_print_fallbacks();
 }
 
 
@@ -111,6 +119,9 @@ parse_options(int argc, char** argv, Options* options) {
         case 'j':
             options->use_jit = true;
             break;
+        case 'f':
+            jit_count_fallbacks = true;
+            break;
         default:
             usage();
         }
@@ -123,11 +134,14 @@ parse_options(int argc, char** argv, Options* options) {
     options->func_name = argc > 2 ? argv[2] : "main";
     options->args = argv + 3;
     options->nargs = argc > 3 ? argc - 3 : 0;
+    options->wasi_argv = argv + 2;
+    options->wasi_argc = argc > 2 ? argc - 2 : 0;
 }
 
 static void
 usage(void) {
-    printf("usage: wasm [-j] <file.wasm> [export] [args...]\n"
-           "  -j  enable jit\n");
+    printf("usage: wasm [-j] [-f] <file.wasm> [export] [args...]\n"
+           "  -j  enable jit\n"
+           "  -f  count jit fallbacks per opcode\n");
     exit();
 }

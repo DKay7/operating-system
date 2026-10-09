@@ -13,7 +13,6 @@
 //       R = 4th bit of ModRM.reg
 //       X = unused for me
 //       B = 4th bit of ModRM.rm
-//
 // ModRM = [mod]:2 [reg]:3 [rm]:3
 // ModRM.reg contains only 3 bit of reg, 4th in the REX.r
 
@@ -114,6 +113,60 @@ x86_mov_m64_r64(CodeBuf* buf, Reg base, int32_t disp, Reg src) {
     emit_mem_operand(buf, src, base, disp);
 }
 
+// [REX] [0F] op ModRM(reg, [base + disp32])
+static void
+emit_op_rm(CodeBuf* buf, bool w64, bool two_byte, uint8_t opcode, uint8_t reg, Reg base, int32_t disp) {
+    emit_rex_w(buf, w64, reg, base);
+    if (two_byte)
+        emit_u8(buf, TWO_BYTE);
+    emit_u8(buf, opcode);
+    emit_mem_operand(buf, reg, base, disp);
+}
+
+#define MEM_LOAD(name, w64, two_byte, opcode)                         \
+    void x86_##name(CodeBuf* buf, Reg dst, Reg base, int32_t disp) { \
+        emit_op_rm(buf, w64, two_byte, opcode, dst, base, disp);     \
+    }
+
+// clang-format off
+MEM_LOAD(mov_r32_m32,    false, false, MOV_R64_M64);
+MEM_LOAD(movzx_r32_m8,   false, true,  MOVZX_R_RM8);
+MEM_LOAD(movzx_r32_m16,  false, true,  MOVZX_R_RM16);
+MEM_LOAD(movsx_r32_m8,   false, true,  MOVSX_R_RM8);
+MEM_LOAD(movsx_r32_m16,  false, true,  MOVSX_R_RM16);
+MEM_LOAD(movsx_r64_m8,   true,  true,  MOVSX_R_RM8);
+MEM_LOAD(movsx_r64_m16,  true,  true,  MOVSX_R_RM16);
+MEM_LOAD(movsxd_r64_m32, true,  false, MOVSXD_R_RM32);
+MEM_LOAD(cmp_r64_m64,    true,  false, CMP_R_RM);
+// clang-format on
+#undef MEM_LOAD
+
+void
+x86_movsxd_r64_r32(CodeBuf* buf, Reg dst, Reg src) {
+    emit_op_rr(buf, true, MOVSXD_R_RM32, dst, src);
+}
+
+void
+x86_mov_m32_r32(CodeBuf* buf, Reg base, int32_t disp, Reg src) {
+    emit_op_rm(buf, false, false, MOV_R64_R64, src, base, disp);
+}
+
+// 66 goes before REX
+void
+x86_mov_m16_r16(CodeBuf* buf, Reg base, int32_t disp, Reg src) {
+    emit_u8(buf, PREFIX_66);
+    emit_op_rm(buf, false, false, MOV_R64_R64, src, base, disp);
+}
+
+// without REX regs 4-7 are ah, ch, dh, bh, not spl, bpl, sil, dil
+void
+x86_mov_m8_r8(CodeBuf* buf, Reg base, int32_t disp, Reg src) {
+    if (src >= RSP || base >= R8)
+        emit_rex(buf, false, src, base);
+    emit_u8(buf, MOV_RM8_R8);
+    emit_mem_operand(buf, src, base, disp);
+}
+
 void
 x86_add_r64_imm32(CodeBuf* buf, Reg dst, int32_t imm) {
     emit_op_rr(buf, true, ADD_RM64_IMM, ADD_IMM_EXT, dst);
@@ -187,13 +240,11 @@ x86_patch_rel32(CodeBuf* buf, size_t at, size_t target) {
         buf->staging[at + idx] = (uint32_t)rel >> (8 * idx);
 }
 
-// "OP r/m, r": dst in rm, src in reg
 #define ALU_RR(name, w64, bits, opcode)                                   \
     void x86_##name##_r##bits##_r##bits(CodeBuf* buf, Reg dst, Reg src) { \
         emit_op_rr(buf, w64, opcode, src, dst);                           \
     }
 
-// "OP r, r/m": dst in reg, src in rm
 #define ALU2_RR(name, w64, bits, opcode)                                  \
     void x86_##name##_r##bits##_r##bits(CodeBuf* buf, Reg dst, Reg src) { \
         emit_op2_rr(buf, w64, opcode, dst, src);                          \

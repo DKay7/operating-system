@@ -131,3 +131,29 @@ jit_call(JitCtx* jit) {
     jit->height = jit->height - type->nparam + type->nresult;
     return true;
 }
+
+bool
+jit_br_table(JitCtx* jit) {
+    uint32_t count = read_u32_leb(&jit->code);
+    jit_wasm_pop(jit, RDX);
+    
+    // may be done via jump table
+    for (uint32_t idx = 0; idx < count; ++idx) {
+        uint32_t depth = read_u32_leb(&jit->code);
+
+        x86_mov_r64_imm64(jit->buf, RCX, idx);
+        x86_cmp_r32_r32(jit->buf, RDX, RCX);
+        size_t skip = x86_jcc(jit->buf, CC_NE);
+
+        emit_branch(jit, depth);
+        x86_patch_rel32(jit->buf, skip, jit->buf->len);
+    }
+
+    emit_branch(jit, read_u32_leb(&jit->code));
+    return true;
+}
+
+bool
+jit_call_indirect(JitCtx* jit) {
+    return false;
+}

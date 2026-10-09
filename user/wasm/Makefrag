@@ -1,7 +1,7 @@
 # WebAssembly JIT for JOS: builds $(OBJDIR)/user/wasm/wasm.
-# Every .c under user/wasm (except tests/) is picked up automatically.
+# Every .c under user/wasm (except tests/, doom/ and helloworld/) is picked up automatically.
 
-WASM_SRCFILES := $(shell find user/wasm -path user/wasm/tests -prune -o -name '*.c' -print)
+WASM_SRCFILES := $(shell find user/wasm \( -path user/wasm/tests -o -path user/wasm/doom -o -path user/wasm/helloworld \) -prune -o -name '*.c' -print)
 WASM_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(WASM_SRCFILES))
 
 OBJDIRS += $(sort $(dir $(WASM_OBJFILES:$(OBJDIR)/%=%)))
@@ -53,5 +53,32 @@ $(OBJDIR)/user/wasm/tests/%.wasm: user/wasm/tests/%.wat
 	@mkdir -p $(@D)
 	$(V)$(WAT2WASM) $< -o $@
 
+
+# WASI programs, built only after user/wasm/doom/fetch.sh has downloaded
+# wasi-libc, compiler builtins, doom-ascii and doom1.wad into doom/third_party/
+WASI_TP := user/wasm/doom/third_party
+WASI_CFLAGS := --target=wasm32-wasi --sysroot=$(WASI_TP)/wasi-sysroot -mcpu=mvp -O2
+WASI_LDFLAGS := -nodefaultlibs -lc $(WASI_TP)/libclang_rt.builtins-wasm32.a \
+                -Wl,-z,stack-size=1048576
+
+ifneq ($(wildcard $(WASI_TP)/wasi-sysroot),)
+WASM_WASI := $(OBJDIR)/user/wasm/helloworld/hello.wasm \
+             $(OBJDIR)/user/wasm/doom/doom.wasm $(WASI_TP)/doom1.wad \
+             $(WASI_TP)/doom-ascii/src/.default.cfg
+endif
+
+$(OBJDIR)/user/wasm/helloworld/hello.wasm: user/wasm/helloworld/hello.c
+	@echo + cc[WASI] $@
+	@mkdir -p $(@D)
+	$(V)$(WASM_CC) $(WASI_CFLAGS) $^ $(WASI_LDFLAGS) -o $@
+
+DOOM_DIR := user/wasm/doom
+DOOM_CFLAGS := $(WASI_CFLAGS) -DNORMALUNIX -DLINUX -I$(DOOM_DIR)/compat -w
+
+$(OBJDIR)/user/wasm/doom/doom.wasm: $(wildcard $(WASI_TP)/doom-ascii/src/*.c) $(DOOM_DIR)/compat/stubs.c
+	@echo + cc[WASI] $@
+	@mkdir -p $(@D)
+	$(V)$(WASM_CC) $(DOOM_CFLAGS) $^ $(WASI_LDFLAGS) -o $@
+
 .PHONY: wasm
-wasm: $(OBJDIR)/user/wasm/wasm $(WASM_TESTS)
+wasm: $(OBJDIR)/user/wasm/wasm $(WASM_TESTS) $(WASM_WASI)

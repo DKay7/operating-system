@@ -41,6 +41,9 @@ jit_compile_module(VM* vm) {
 
 static int64_t
 jit_compile_func(CodeBuf* buf, VM* vm, uint32_t func_idx) {
+    if (vm->module->funcs[func_idx].imported)
+        return -1;
+
     JitCtx jit;
     jitctx_init(&jit, buf, vm, func_idx);
 
@@ -156,12 +159,32 @@ is_control(uint8_t opcode) {
     return false;
 }
 
+bool jit_count_fallbacks;
+static uint64_t fallback_counts[256];
+
+void
+jit_print_fallbacks(void) {
+    if (!jit_count_fallbacks)
+        return;
+
+    printf("fallbacks:\n");
+    for (int opcode = 0; opcode < 256; ++opcode) {
+        if (fallback_counts[opcode])
+            printf("  %-20s %lu\n", opcode_name(opcode), fallback_counts[opcode]);
+    }
+}
+
 static uint64_t*
 jit_fallback(CallCtx* ctx, uint64_t* sp, uint64_t opcode_offset) {
     jit_set_stack_top(ctx, sp);
     reader_goto(&ctx->code, opcode_offset);
     ctx->pc = opcode_offset;
-    interp_step(ctx, read_u8(&ctx->code));
+
+    uint8_t opcode = read_u8(&ctx->code);
+    if (jit_count_fallbacks)
+        fallback_counts[opcode]++;
+
+    interp_step(ctx, opcode);
     return jit_stack_top(ctx);
 }
 

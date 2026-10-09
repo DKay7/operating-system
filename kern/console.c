@@ -278,7 +278,7 @@ serial_intr(void) {
     if (serial_exists) cons_intr(serial_proc_data);
 }
 
-static void
+void
 serial_putc(int c) {
     for (size_t i = 0; i < 12800; i++) {
         if (inb(COM1 + COM_LSR) & COM_LSR_TXRDY) break;

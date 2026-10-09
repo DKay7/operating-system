@@ -32,6 +32,9 @@ typedef struct {
 
 void jit_compile_module(VM* vm);
 
+extern bool jit_count_fallbacks;
+void jit_print_fallbacks(void);
+
 // push / pop a register on the wasm value stack (rbx), changing jit->height
 void jit_wasm_push(JitCtx* jit, Reg reg);
 void jit_wasm_pop(JitCtx* jit, Reg reg);

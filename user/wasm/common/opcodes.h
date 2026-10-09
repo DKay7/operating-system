@@ -9,6 +9,11 @@ typedef enum {
     #include "common/opcodes.def"
 } Opcode;
 
+enum {
+    MISC_MEMORY_COPY = 0x0A,
+    MISC_MEMORY_FILL = 0x0B,
+};
+
 #undef OP_DEF
 
 static inline const char*

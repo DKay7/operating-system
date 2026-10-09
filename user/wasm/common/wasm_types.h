@@ -5,7 +5,8 @@
 typedef enum : uint8_t {
     i32 = 0x7f,
     i64 = 0x7e,
-    // f32 = 0x7d and f64 = 0x7c are not supported
+    f32 = 0x7d,
+    f64 = 0x7c,
 } ValueType;
 
 #define BLOCK_TYPE_EMPTY 0x40
@@ -38,6 +39,13 @@ typedef struct {
 
     uint32_t *block_end;
     uint32_t *block_else;
+
+    bool imported;
+    const uint8_t *import_module;
+    uint32_t import_module_len;
+    const uint8_t *import_name;
+    uint32_t import_name_len;
+    void *host;
 } Func;
 
 typedef struct {
@@ -59,20 +67,36 @@ typedef struct {
 } Global;
 
 typedef struct {
+    Expression offset;
+    const uint8_t *bytes;
+    uint32_t len;
+} Data;
+
+typedef struct {
+    Expression offset;
+    uint32_t *funcs;
+    uint32_t len;
+} Elem;
+
+typedef struct {
     FuncType *types;
     uint32_t ntypes;
 
-    uint32_t *func_type_idx;
-    uint32_t nfunc_type_idx;
 
     Func *funcs;
-    uint32_t nfuncs, nimported_funcs;
+    uint32_t nfuncs;
     Global *globals;
     uint32_t nglobals;
     Export *exports;
     uint32_t nexports;
-    // Data *data; todo: :(
+
+    Data *data;
+
     uint32_t ndata;
+    Elem *elems;
+    uint32_t nelems;
+    bool has_table;
+    uint32_t table_min, table_max;
     bool has_memory;
     uint32_t mem_min, mem_max;
     bool has_start;

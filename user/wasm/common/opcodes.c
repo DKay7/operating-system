@@ -53,6 +53,31 @@ skip_i64(Reader* code) {
     read_i64_leb(code);
 }
 
+static void
+skip_f32(Reader* code) {
+    read_bytes(code, 4);
+}
+
+static void
+skip_f64(Reader* code) {
+    read_bytes(code, 8);
+}
+
+static void
+skip_misc(Reader* code) {
+    uint32_t op = read_u32_leb(code);
+    switch (op) {
+    case MISC_MEMORY_COPY:
+        read_u8(code);
+        read_u8(code);
+        return;
+    case MISC_MEMORY_FILL:
+        read_u8(code);
+        return;
+    }
+    CHECK(false, "unknown 0xFC opcode %u\n", op);
+}
+
 void
 skip_immediates(uint8_t opcode, Reader* code) {
     switch (opcode) {

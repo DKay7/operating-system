@@ -92,3 +92,77 @@ CMP(32, ge_u, CC_AE);        CMP(64, ge_u, CC_AE);
 //
 #undef EQZ
 #undef CMP
+
+bool
+jit_i64_const(JitCtx* jit) {
+    return false;
+}
+
+#define SHIFT(width, name, x86_name)                   \
+    bool jit_i##width##_##name(JitCtx* jit) {          \
+        jit_wasm_pop(jit, RCX);                        \
+        jit_wasm_pop(jit, RAX);                        \
+        x86_##x86_name##_r##width##_cl(jit->buf, RAX); \
+        jit_wasm_push(jit, RAX);                       \
+        return true;                                   \
+    }
+
+SHIFT(32, shl, shl);
+SHIFT(32, shr_s, sar);
+SHIFT(32, shr_u, shr);
+
+SHIFT(64, shl, shl);
+SHIFT(64, shr_s, sar);
+SHIFT(64, shr_u, shr);
+
+#undef SHIFT
+
+bool
+jit_i32_div_u(JitCtx* jit) {
+    jit_wasm_pop(jit, RCX);
+    jit_wasm_pop(jit, RAX);
+    x86_xor_r32_r32(jit->buf, RDX, RDX);
+    x86_div_r32(jit->buf, RCX);
+    jit_wasm_push(jit, RAX);
+    return true;
+}
+
+bool
+jit_i32_rem_u(JitCtx* jit) {
+    jit_wasm_pop(jit, RCX);
+    jit_wasm_pop(jit, RAX);
+    x86_xor_r32_r32(jit->buf, RDX, RDX);
+    x86_div_r32(jit->buf, RCX);
+    jit_wasm_push(jit, RDX);
+    return true;
+}
+
+
+bool
+jit_i32_div_s(JitCtx* jit) {
+    jit_wasm_pop(jit, RCX);
+    jit_wasm_pop(jit, RAX);
+    x86_cdq(jit->buf);
+    x86_idiv_r32(jit->buf, RCX);
+    jit_wasm_push(jit, RAX);
+    return true;
+}
+
+bool
+jit_i32_rem_s(JitCtx* jit) {
+    // have to think about INT_MIN % -1 
+    // according to wasm spec
+    // which was obviously written by dumbasses
+    // we have to implement it like 
+    // rhs == -1 ? 0 : lhs % rhs
+    //
+    // jit_wasm_pop(jit, RCX);
+    // jit_wasm_pop(jit, RAX);
+    // x86_cdq(jit->buf);
+    // x86_idiv_r32(jit->buf, RCX);
+    // jit_wasm_push(jit, RDX);
+    // return true;
+    return false;
+}
+
+

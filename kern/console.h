@@ -16,6 +16,7 @@
 void cons_init(void);
 void fb_init(void);
 int cons_getc(void);
+void serial_putc(int c);
 
 /* IRQ1 */
 void kbd_intr(void);

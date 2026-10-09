@@ -155,3 +155,18 @@ int
 sys_gettime(void) {
     return syscall(SYS_gettime, 0, 0, 0, 0, 0, 0, 0);
 }
+
+int
+sys_getc_nonblocking(void) {
+    return syscall(SYS_getc_nonblocking, 0, 0, 0, 0, 0, 0, 0);
+}
+
+uint64_t
+sys_get_tsc_freq(void) {
+    return syscall(SYS_get_tsc_freq, 0, 0, 0, 0, 0, 0, 0);
+}
+
+int
+sys_cputs_serial(const char *s, size_t len) {
+    return syscall(SYS_cputs_serial, 0, (uintptr_t)s, len, 0, 0, 0, 0);
+}

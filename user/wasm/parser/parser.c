@@ -22,6 +22,10 @@ void parse_export(Parser* parser, Export* out);
 void parse_func(Parser* parser, Func* out);
 static void parse_blocks(Func* func);
 void parse_expression(Parser* parser, Expression* out);
+void parse_import(Parser* parser, Func* out);
+void parse_data(Parser* parser, Data* out);
+void parse_elem(Parser* parser, Elem* out);
+int parse_data_count_section(Parser* parser, uint32_t sec_size);
 
 int parse_custom_section(Parser*, uint32_t sec_size);
 int parse_type_section(Parser*, uint32_t sec_size);
@@ -68,10 +72,9 @@ parser_init(Parser* parser, const uint8_t* buf, size_t size) {
     reader_init(&parser->reader, buf, size);
 }
 
-// wasm 1.0 has only integer and float types, and we skip floats
 static bool
 is_valtype(uint8_t type) {
-    return type == i32 || type == i64;
+    return type == i32 || type == i64 || type == f32 || type == f64;
 }
 
 
@@ -94,8 +97,8 @@ read_section(Parser* parser) {
     uint32_t sec_size = read_u32_leb(&parser->reader);
     CHECK(reader_ok(&parser->reader), "wrong section header");
 
-    // custom sections may go anywhere, others only once and in increasing order
-    if (sec_id != 0) {
+    // custom sections may be anywhere, as data count section
+    if (sec_id != 0 && sec_id != 12) {
         CHECK(sec_id > parser->last_section_id, "sections out of order");
         parser->last_section_id = sec_id;
     }
@@ -139,6 +142,9 @@ read_section(Parser* parser) {
         break;
     case 11:
         ret = parse_data_section(parser, sec_size);
+        break;
+    case 12:
+        ret = parse_data_count_section(parser, sec_size);
         break;
 
     default:
@@ -199,37 +205,92 @@ parse_vec_valtypes(Parser* parser, uint32_t* out_len, ValueType** out_data) {
 
 int
 parse_import_section(Parser* parser, uint32_t sec_size) {
-    CHECK(false, "import section not implemented");
+    uint32_t vec_len = read_vec_len(&parser->reader);
+    Func* import_arr = balloc(vec_len, sizeof(Func));
+
+    CHECK(import_arr, "OOM");
+
+    for (uint32_t idx = 0; idx < vec_len; ++idx) {
+        parse_import(parser, &import_arr[idx]);
+    }
+    CHECK(reader_ok(&parser->reader), "wrong import section");
+
+    parser->module.funcs = import_arr;
+    parser->module.nfuncs = vec_len;
+
     return 0;
+}
+
+void
+parse_import(Parser* parser, Func* out) {
+    uint32_t module_name_len = 0;
+    const uint8_t* module_name = read_name(&parser->reader, &module_name_len);
+
+    uint32_t func_name_len = 0;
+    const uint8_t* func_name = read_name(&parser->reader, &func_name_len);
+
+    uint8_t kind = read_u8(&parser->reader);
+    CHECK(kind == 0, "Only function imports are supported for now"); // TODO :)
+    uint32_t type_idx = read_u32_leb(&parser->reader);
+
+    out->imported = true;
+
+    out->import_module = module_name;
+    out->import_module_len = module_name_len;
+
+    out->import_name = func_name;
+    out->import_name_len = func_name_len;
+
+    out->type_idx = type_idx;
 }
 
 int
 parse_function_section(Parser* parser, uint32_t sec_size) {
 
+    Module* module = &parser->module;
     uint32_t vec_len = read_vec_len(&parser->reader);
-    uint32_t* typeidx_arr = balloc(vec_len, sizeof(uint32_t));
-    CHECK(typeidx_arr, "OOM");
+    Func* funcs = balloc(module->nfuncs + vec_len, sizeof(Func));
+    CHECK(funcs, "OOM");
+    memcpy(funcs, module->funcs, module->nfuncs * sizeof(Func));
 
     for (uint32_t idx = 0; idx < vec_len; ++idx) {
-        typeidx_arr[idx] = read_u32_leb(&parser->reader);
+        funcs[module->nfuncs++].type_idx = read_u32_leb(&parser->reader);
     }
     CHECK(reader_ok(&parser->reader), "wrong function section");
 
-    parser->module.func_type_idx = typeidx_arr;
-    parser->module.nfunc_type_idx = vec_len;
+    module->funcs = funcs;
 
     return 0;
 }
 
 int
 parse_table_section(Parser* parser, uint32_t sec_size) {
+    uint32_t vec_len = read_vec_len(&parser->reader);
+    CHECK(vec_len <= 1, "only one table is allowed");
+    if (vec_len == 0)
+        return 0;
+
+    uint8_t elemtype = read_u8(&parser->reader);
+    CHECK(elemtype == 0x70, "only funcref tables are supported");
+
+    uint8_t type = read_u8(&parser->reader);
+    CHECK(type == 0x00 || type == 0x01, "wrong type of limit");
+
+    parser->module.table_min = read_u32_leb(&parser->reader);
+    parser->module.table_max = parser->module.table_min;
+    if (type == 0x01)
+        parser->module.table_max = read_u32_leb(&parser->reader);
+
+    CHECK(reader_ok(&parser->reader), "wrong table section");
+    parser->module.has_table = true;
+
     return 0;
 }
 
 int
 parse_memory_section(Parser* parser, uint32_t sec_size) {
 
-    // wasm 1.0 allows at most one memory
+    // max one memory
     uint32_t vec_len = read_vec_len(&parser->reader);
     CHECK(vec_len <= 1, "only one memory is allowed");
     if (vec_len == 0)
@@ -240,7 +301,7 @@ parse_memory_section(Parser* parser, uint32_t sec_size) {
 
     // min value is always presented
     parser->module.mem_min = read_u32_leb(&parser->reader);
-    parser->module.mem_max = 0x10000; // no max: up to 4 GiB, 64 KiB pages
+    parser->module.mem_max = 0x10000; // no max
 
     if (type == 0x01)
         parser->module.mem_max = read_u32_leb(&parser->reader);
@@ -302,13 +363,40 @@ parse_export(Parser* parser, Export* out) {
 
 int
 parse_start_section(Parser* parser, uint32_t sec_size) {
-    CHECK(false, "start section not implemented");
+    parser->module.start_func = read_u32_leb(&parser->reader);
+    parser->module.has_start = true;
     return 0;
 }
 int
 parse_element_section(Parser* parser, uint32_t sec_size) {
-    CHECK(false, "welement section not implemented");
+    uint32_t vec_len = read_vec_len(&parser->reader);
+    Elem* elem_arr = balloc(vec_len, sizeof(Elem));
+    CHECK(elem_arr, "OOM");
+
+    for (uint32_t idx = 0; idx < vec_len; ++idx) {
+        parse_elem(parser, &elem_arr[idx]);
+    }
+    CHECK(reader_ok(&parser->reader), "wrong element section");
+
+    parser->module.elems = elem_arr;
+    parser->module.nelems = vec_len;
+
     return 0;
+}
+
+void
+parse_elem(Parser* parser, Elem* out) {
+    uint32_t flags = read_u32_leb(&parser->reader);
+    CHECK(flags == 0, "only active elements of table 0 are supported\n");
+    parse_expression(parser, &out->offset);
+
+    out->len = read_vec_len(&parser->reader);
+    out->funcs = balloc(out->len, sizeof(uint32_t));
+    CHECK(out->funcs, "OOM");
+
+    for (uint32_t idx = 0; idx < out->len; ++idx) {
+        out->funcs[idx] = read_u32_leb(&parser->reader);
+    }
 }
 
 int
@@ -316,18 +404,15 @@ parse_code_section(Parser* parser, uint32_t sec_size) {
     uint32_t vec_len = read_vec_len(&parser->reader);
     CHECK(reader_ok(&parser->reader), "wrong code section");
     // function section gives types, code section gives bodies, one per function
-    CHECK(vec_len == parser->module.nfunc_type_idx, "function and code section sizes differ");
 
-    Func* funcs = balloc(vec_len, sizeof(*funcs));
-    CHECK(funcs, "OOM");
-
-    for (uint32_t idx = 0; idx < vec_len; ++idx) {
-        funcs[idx].type_idx = parser->module.func_type_idx[idx];
-        parse_func(parser, &funcs[idx]);
+    uint32_t nbodies = 0;
+    for (uint32_t idx = 0; idx < parser->module.nfuncs; ++idx) {
+        if (parser->module.funcs[idx].imported)
+            continue;
+        parse_func(parser, &parser->module.funcs[idx]);
+        ++nbodies;
     }
-
-    parser->module.funcs = funcs;
-    parser->module.nfuncs = vec_len;
+    CHECK(nbodies == vec_len, "function and code section sizes differ");
 
     return 0;
 }
@@ -430,8 +515,35 @@ parse_blocks(Func* func) {
 
 int
 parse_data_section(Parser* parser, uint32_t sec_size) {
-    CHECK(false, "data section not implemented");
+    uint32_t vec_len = read_vec_len(&parser->reader);
+    Data* data_arr = balloc(vec_len, sizeof(Data));
+    CHECK(data_arr, "OOM");
+
+    for (uint32_t idx = 0; idx < vec_len; ++idx) {
+        parse_data(parser, &data_arr[idx]);
+    }
+    CHECK(reader_ok(&parser->reader), "wrong data section");
+
+    parser->module.data = data_arr;
+    parser->module.ndata = vec_len;
+
     return 0;
+}
+
+int
+parse_data_count_section(Parser* parser, uint32_t sec_size) {
+    read_u32_leb(&parser->reader);
+    return 0;
+}
+
+void
+parse_data(Parser* parser, Data* out) {
+    uint8_t memidx = read_u8(&parser->reader);
+    CHECK(memidx == 0, "other data types are not supported\n");
+    parse_expression(parser, &out->offset);
+
+    out->len = read_vec_len(&parser->reader);
+    out->bytes = read_bytes(&parser->reader, out->len);
 }
 
 void

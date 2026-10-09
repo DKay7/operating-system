@@ -1,0 +1,17 @@
+fallbacks:
+  memory_grow          3
+  i64_extend_i32_u     114
+  i64_div_u            1430
+  i32_rem_s            3819
+  misc                 7030
+  i64_div_s            12136
+  i32_div_s            25197 // done?
+  i32_rotl             87809
+  call_indirect        96121
+  global_get           170843
+  i32_wrap_i64         172048 // done
+  i64_const            313229
+  global_set           341677
+  i64_extend_i32_s     342982 // done
+  i32_rem_u            5325508 // done?
+  i32_div_u            6703412 // done

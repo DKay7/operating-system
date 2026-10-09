@@ -55,6 +55,13 @@ typedef enum {
     POPCNT_R_RM  = 0xB8,
     BSF_R_RM     = 0xBC,
     BSR_R_RM     = 0xBD,
+    MOVZX_R_RM16 = 0xB7,
+    MOVSX_R_RM8  = 0xBE,
+    MOVSX_R_RM16 = 0xBF,
+    MOVSXD_R_RM32 = 0x63,
+    MOV_RM8_R8   = 0x88,
+    CMP_R_RM     = 0x3B,
+    PREFIX_66    = 0x66,
 } x86Op;
 
 // goes to ModRM.reg
@@ -89,6 +96,27 @@ void x86_mov_r64_imm64(CodeBuf* buf, Reg dst, uint64_t imm);
 void x86_mov_r64_r64(CodeBuf* buf, Reg dst, Reg src);
 void x86_mov_r64_m64(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
 void x86_mov_m64_r64(CodeBuf* buf, Reg base, int32_t disp, Reg src);
+
+// dst = [base + disp] of the given width, zero- (zx) or sign- (sx) extended;
+// 32-bit forms zero the upper half of dst
+void x86_mov_r32_m32(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movzx_r32_m8(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movzx_r32_m16(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movsx_r32_m8(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movsx_r32_m16(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movsx_r64_m8(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movsx_r64_m16(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+void x86_movsxd_r64_m32(CodeBuf* buf, Reg dst, Reg base, int32_t disp);
+// dst = sign-extended src32
+void x86_movsxd_r64_r32(CodeBuf* buf, Reg dst, Reg src);
+
+// [base + disp] = low 8 / 16 / 32 bits of src
+void x86_mov_m8_r8(CodeBuf* buf, Reg base, int32_t disp, Reg src);
+void x86_mov_m16_r16(CodeBuf* buf, Reg base, int32_t disp, Reg src);
+void x86_mov_m32_r32(CodeBuf* buf, Reg base, int32_t disp, Reg src);
+
+// flags of a - [base + disp]
+void x86_cmp_r64_m64(CodeBuf* buf, Reg a, Reg base, int32_t disp);
 void x86_add_r32_r32(CodeBuf* buf, Reg dst, Reg src);
 void x86_add_r64_imm32(CodeBuf* buf, Reg dst, int32_t imm);
 

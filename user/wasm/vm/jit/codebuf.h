@@ -7,7 +7,7 @@
 #define JIT_REGION_BASE  0x1000000000ULL
 #define JIT_STAGING_BASE 0x1400000000ULL
 #define JIT_CODE_BASE    0x1800000000ULL
-#define JIT_CODE_SIZE    (1ULL << 22)   
+#define JIT_CODE_SIZE    (1ULL << 24)   
 
 typedef struct {
     uint8_t* staging; // RW

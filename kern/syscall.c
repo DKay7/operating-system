@@ -17,6 +17,7 @@
 #include <kern/syscall.h>
 #include <kern/trap.h>
 #include <kern/traceopt.h>
+#include <kern/timer.h>
 #include <stddef.h>
 
 /* Print a string to the system console.
@@ -30,14 +31,13 @@ sys_cputs(const char* s, size_t len) {
      * Destroy the environment if not. */
     user_mem_assert(curenv, s, len, PROT_R);
 
-    // FIXME: copy from user via nosan_memcpy
     const int size = 32;
     char buf[size];
 
 
     for (int i = 0; i < len; ++i) {
         if (i % size == 0)
-            nosan_memcpy(buf, (void *)(s + i), MIN(len - i, size));
+            nosan_memcpy(buf, (void*)(s + i), MIN(len - i, size));
 
         cputchar(buf[i % size]);
     }
@@ -501,6 +501,35 @@ sys_gettime(void) {
     return gettime();
 }
 
+static int
+sys_getc_nonblocking(void) {
+    return cons_getc();
+}
+
+static uint64_t
+sys_get_tsc_freq(void) {
+    return timer_for_schedule->get_cpu_freq();
+}
+
+static int
+sys_cputs_serial(const char* s, size_t len) {
+
+    user_mem_assert(curenv, s, len, PROT_R);
+
+    const int size = 32;
+    char buf[size];
+
+
+    for (int i = 0; i < len; ++i) {
+        if (i % size == 0)
+            nosan_memcpy(buf, (void*)(s + i), MIN(len - i, size));
+
+        serial_putc(buf[i % size]);
+    }
+
+    return 0;
+}
+
 /*
  * This function return the difference between maximal
  * number of references of regions [addr, addr + size] and [addr2,addr2+size2]
@@ -578,6 +607,12 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_env_set_trapframe((envid_t)a1, (struct Trapframe*)a2);
     case SYS_gettime:
         return sys_gettime();
+    case SYS_getc_nonblocking:
+        return sys_getc_nonblocking();
+    case SYS_get_tsc_freq:
+        return sys_get_tsc_freq();
+    case SYS_cputs_serial:
+        return sys_cputs_serial((const char*)a1, (size_t)a2);
     }
 
     return -E_NO_SYS;

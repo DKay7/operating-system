@@ -9,6 +9,7 @@
 #define LABELS_SIZE    4096
 #define MAX_CALL_DEPTH 300
 #define WASM_PAGE_SIZE (64 * 1024)
+#define MAX_MEM_PAGES  1024
 
 typedef struct {
     Module* module;
@@ -17,6 +18,10 @@ typedef struct {
 
     uint8_t* memory;
     uint64_t mem_size;
+    uint64_t mem_capacity;
+
+    uint32_t* table;
+    uint32_t table_size;
 
     Stack stack;
     LabelStack labels;
